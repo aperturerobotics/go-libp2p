@@ -6,8 +6,6 @@ import (
 	"testing"
 
 	"github.com/libp2p/go-libp2p/core/crypto/pb"
-
-	"google.golang.org/protobuf/proto"
 )
 
 func TestBasicSignAndVerify(t *testing.T) {
@@ -86,10 +84,10 @@ func TestMarshalLoop(t *testing.T) {
 					t.Fatal(err)
 				}
 				data = append(data, data[len(data)-ed25519.PublicKeySize:]...)
-				return proto.Marshal(&pb.PrivateKey{
-					Type: priv.Type().Enum(),
+				return (&pb.PrivateKey{
+					Type: priv.Type(),
 					Data: data,
-				})
+				}).MarshalVT()
 			},
 		} {
 			t.Run(name, func(t *testing.T) {
@@ -152,10 +150,10 @@ func TestMarshalLoop(t *testing.T) {
 func TestUnmarshalErrors(t *testing.T) {
 	t.Run("PublicKey", func(t *testing.T) {
 		t.Run("Invalid data length", func(t *testing.T) {
-			data, err := proto.Marshal(&pb.PublicKey{
-				Type: pb.KeyType_Ed25519.Enum(),
+			data, err := (&pb.PublicKey{
+				Type: pb.KeyType_Ed25519,
 				Data: []byte{42},
-			})
+			}).MarshalVT()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -179,10 +177,10 @@ func TestUnmarshalErrors(t *testing.T) {
 			// Append the private key instead of the public key.
 			data = append(data, data[:ed25519.PublicKeySize]...)
 
-			b, err := proto.Marshal(&pb.PrivateKey{
-				Type: priv.Type().Enum(),
+			b, err := (&pb.PrivateKey{
+				Type: priv.Type(),
 				Data: data,
-			})
+			}).MarshalVT()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -197,10 +195,10 @@ func TestUnmarshalErrors(t *testing.T) {
 		})
 
 		t.Run("Invalid data length", func(t *testing.T) {
-			data, err := proto.Marshal(&pb.PrivateKey{
-				Type: pb.KeyType_Ed25519.Enum(),
+			data, err := (&pb.PrivateKey{
+				Type: pb.KeyType_Ed25519,
 				Data: []byte{42},
-			})
+			}).MarshalVT()
 			if err != nil {
 				t.Fatal(err)
 			}

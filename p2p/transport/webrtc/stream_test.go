@@ -11,7 +11,6 @@ import (
 
 	"github.com/libp2p/go-libp2p/p2p/transport/webrtc/pb"
 	"github.com/libp2p/go-msgio/pbio"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/libp2p/go-libp2p/core/network"
 
@@ -107,7 +106,7 @@ func getDetachedDataChannels(t *testing.T) (detachedChan, detachedChan) {
 func assertDataChannelOpen(t *testing.T, dc *datachannel.DataChannel) {
 	t.Helper()
 	emptyMsg := &pb.Message{}
-	msg, err := proto.Marshal(emptyMsg)
+	msg, err := emptyMsg.MarshalVT()
 	if err != nil {
 		t.Fatal("unexpected mashalling error", err)
 	}
@@ -127,7 +126,7 @@ func assertDataChannelOpen(t *testing.T, dc *datachannel.DataChannel) {
 func assertDataChannelClosed(t *testing.T, dc *datachannel.DataChannel) {
 	t.Helper()
 	emptyMsg := &pb.Message{}
-	msg, err := proto.Marshal(emptyMsg)
+	msg, err := emptyMsg.MarshalVT()
 	if err != nil {
 		t.Fatal("unexpected mashalling error", err)
 	}

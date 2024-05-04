@@ -7,10 +7,8 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	. "github.com/libp2p/go-libp2p/core/record"
-	"github.com/libp2p/go-libp2p/core/record/pb"
+	pb "github.com/libp2p/go-libp2p/core/record/pb"
 	"github.com/libp2p/go-libp2p/core/test"
-
-	"google.golang.org/protobuf/proto"
 )
 
 type simpleRecord struct {
@@ -302,12 +300,12 @@ func alterMessageAndMarshal(t *testing.T, envelope *Envelope, alterMsg func(*pb.
 	serialized, err := envelope.Marshal()
 	test.AssertNilError(t, err)
 
-	msg := pb.Envelope{}
-	err = proto.Unmarshal(serialized, &msg)
+	msg := &pb.Envelope{}
+	err = msg.UnmarshalVT(serialized)
 	test.AssertNilError(t, err)
 
-	alterMsg(&msg)
-	serialized, err = proto.Marshal(&msg)
+	alterMsg(msg)
+	serialized, err = msg.MarshalVT()
 	test.AssertNilError(t, err)
 
 	return serialized

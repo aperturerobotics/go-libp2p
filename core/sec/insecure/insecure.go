@@ -14,11 +14,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/sec"
-	"github.com/libp2p/go-libp2p/core/sec/insecure/pb"
+	pb "github.com/libp2p/go-libp2p/core/sec/insecure/pb"
 
 	"github.com/libp2p/go-msgio"
-
-	"google.golang.org/protobuf/proto"
 )
 
 //go:generate protoc --proto_path=$PWD:$PWD/../../.. --go_out=. --go_opt=Mpb/plaintext.proto=./pb pb/plaintext.proto
@@ -179,7 +177,7 @@ func (ic *Conn) runHandshakeSync() error {
 func readWriteMsg(rw io.ReadWriter, out *pb.Exchange) (*pb.Exchange, error) {
 	const maxMessageSize = 1 << 16
 
-	outBytes, err := proto.Marshal(out)
+	outBytes, err := out.MarshalVT()
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +201,7 @@ func readWriteMsg(rw io.ReadWriter, out *pb.Exchange) (*pb.Exchange, error) {
 		return nil, err2
 	}
 	inMsg := new(pb.Exchange)
-	err = proto.Unmarshal(b, inMsg)
+	err = inMsg.UnmarshalVT(b)
 	return inMsg, err
 }
 

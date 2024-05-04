@@ -7,8 +7,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoreds/pb"
-	"google.golang.org/protobuf/proto"
+	pb "github.com/libp2p/go-libp2p/p2p/host/peerstore/pstoreds/pb"
 
 	ds "github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
@@ -233,7 +232,7 @@ func (gc *dsAddrBookGc) purgeLookahead() {
 			dropInError(gcKey, err, "fetching entry")
 			continue
 		}
-		err = proto.Unmarshal(val, record)
+		err = record.UnmarshalVT(val)
 		if err != nil {
 			dropInError(gcKey, err, "unmarshalling entry")
 			continue
@@ -277,7 +276,7 @@ func (gc *dsAddrBookGc) purgeStore() {
 	// keys: 	/peers/addrs/<peer ID b32>
 	for result := range results.Next() {
 		record.Reset()
-		if err = proto.Unmarshal(result.Value, record); err != nil {
+		if err = record.UnmarshalVT(result.Value); err != nil {
 			// TODO log
 			continue
 		}
@@ -366,7 +365,7 @@ func (gc *dsAddrBookGc) populateLookahead() {
 			log.Warnf("failed which getting record from store for peer: %s, err: %v", id, err)
 			continue
 		}
-		if err := proto.Unmarshal(val, record); err != nil {
+		if err := record.UnmarshalVT(val); err != nil {
 			log.Warnf("failed while unmarshalling record from store for peer: %s, err: %v", id, err)
 			continue
 		}

@@ -8,12 +8,11 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/internal/catch"
-	"github.com/libp2p/go-libp2p/core/record/pb"
+	pb "github.com/libp2p/go-libp2p/core/record/pb"
 
 	pool "github.com/libp2p/go-buffer-pool"
 
 	"github.com/multiformats/go-varint"
-	"google.golang.org/protobuf/proto"
 )
 
 //go:generate protoc --proto_path=$PWD:$PWD/../.. --go_out=. --go_opt=Mpb/envelope.proto=./pb pb/envelope.proto
@@ -170,8 +169,8 @@ func ConsumeTypedEnvelope(data []byte, destRecord Record) (envelope *Envelope, e
 // UnmarshalEnvelope unmarshals a serialized Envelope protobuf message,
 // without validating its contents. Most users should use ConsumeEnvelope.
 func UnmarshalEnvelope(data []byte) (*Envelope, error) {
-	var e pb.Envelope
-	if err := proto.Unmarshal(data, &e); err != nil {
+	e := &pb.Envelope{}
+	if err := e.UnmarshalVT(data); err != nil {
 		return nil, err
 	}
 
@@ -203,7 +202,7 @@ func (e *Envelope) Marshal() (res []byte, err error) {
 		Payload:     e.RawPayload,
 		Signature:   e.signature,
 	}
-	return proto.Marshal(&msg)
+	return msg.MarshalVT()
 }
 
 // Equal returns true if the other Envelope has the same public key,

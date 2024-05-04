@@ -4,10 +4,10 @@ import (
 	"errors"
 	"io"
 
+	protobuf_go_lite "github.com/aperturerobotics/protobuf-go-lite"
 	pool "github.com/libp2p/go-buffer-pool"
 	"github.com/libp2p/go-msgio/pbio"
 	"github.com/multiformats/go-varint"
-	"google.golang.org/protobuf/proto"
 )
 
 type DelimitedReader struct {
@@ -42,7 +42,7 @@ func (d *DelimitedReader) ReadByte() (byte, error) {
 	return buf[0], err
 }
 
-func (d *DelimitedReader) ReadMsg(msg proto.Message) error {
+func (d *DelimitedReader) ReadMsg(msg protobuf_go_lite.Message) error {
 	mlen, err := varint.ReadUvarint(d)
 	if err != nil {
 		return err
@@ -58,7 +58,7 @@ func (d *DelimitedReader) ReadMsg(msg proto.Message) error {
 		return err
 	}
 
-	return proto.Unmarshal(buf, msg)
+	return msg.UnmarshalVT(buf)
 }
 
 func NewDelimitedWriter(w io.Writer) pbio.WriteCloser {

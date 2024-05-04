@@ -10,9 +10,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/libp2p/go-libp2p/core/crypto/pb"
-
-	"google.golang.org/protobuf/proto"
+	pb "github.com/libp2p/go-libp2p/core/crypto/pb"
 )
 
 //go:generate protoc --go_out=. --go_opt=Mpb/crypto.proto=./pb pb/crypto.proto
@@ -124,7 +122,7 @@ func GenerateKeyPairWithReader(typ, bits int, src io.Reader) (PrivKey, PubKey, e
 // representative object
 func UnmarshalPublicKey(data []byte) (PubKey, error) {
 	pmes := new(pb.PublicKey)
-	err := proto.Unmarshal(data, pmes)
+	err := pmes.UnmarshalVT(data)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +147,10 @@ func PublicKeyFromProto(pmes *pb.PublicKey) (PubKey, error) {
 
 	switch tpk := pk.(type) {
 	case *RsaPublicKey:
-		tpk.cached, _ = proto.Marshal(pmes)
+		tpk.cached, err = pmes.MarshalVT()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return pk, nil
@@ -163,7 +164,7 @@ func MarshalPublicKey(k PubKey) ([]byte, error) {
 		return nil, err
 	}
 
-	return proto.Marshal(pbmes)
+	return pbmes.MarshalVT()
 }
 
 // PublicKeyToProto converts a public key object into an unserialized
@@ -174,7 +175,7 @@ func PublicKeyToProto(k PubKey) (*pb.PublicKey, error) {
 		return nil, err
 	}
 	return &pb.PublicKey{
-		Type: k.Type().Enum(),
+		Type: k.Type(),
 		Data: data,
 	}, nil
 }
@@ -183,7 +184,7 @@ func PublicKeyToProto(k PubKey) (*pb.PublicKey, error) {
 // representative object
 func UnmarshalPrivateKey(data []byte) (PrivKey, error) {
 	pmes := new(pb.PrivateKey)
-	err := proto.Unmarshal(data, pmes)
+	err := pmes.UnmarshalVT(data)
 	if err != nil {
 		return nil, err
 	}
@@ -202,10 +203,10 @@ func MarshalPrivateKey(k PrivKey) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return proto.Marshal(&pb.PrivateKey{
-		Type: k.Type().Enum(),
+	return (&pb.PrivateKey{
+		Type: k.Type(),
 		Data: data,
-	})
+	}).MarshalVT()
 }
 
 // ConfigDecodeKey decodes from b64 (for config file) to a byte array that can be unmarshalled.
