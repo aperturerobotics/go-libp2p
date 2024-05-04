@@ -6,12 +6,10 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/internal/catch"
-	"github.com/libp2p/go-libp2p/core/peer/pb"
+	pb "github.com/libp2p/go-libp2p/core/peer/pb"
 	"github.com/libp2p/go-libp2p/core/record"
 
 	ma "github.com/multiformats/go-multiaddr"
-
-	"google.golang.org/protobuf/proto"
 )
 
 //go:generate protoc --proto_path=$PWD:$PWD/../.. --go_out=. --go_opt=Mpb/peer_record.proto=./pb pb/peer_record.proto
@@ -169,13 +167,13 @@ func (r *PeerRecord) UnmarshalRecord(bytes []byte) (err error) {
 
 	defer func() { catch.HandlePanic(recover(), &err, "libp2p peer record unmarshal") }()
 
-	var msg pb.PeerRecord
-	err = proto.Unmarshal(bytes, &msg)
+	msg := &pb.PeerRecord{}
+	err = msg.UnmarshalVT(bytes)
 	if err != nil {
 		return err
 	}
 
-	rPtr, err := PeerRecordFromProtobuf(&msg)
+	rPtr, err := PeerRecordFromProtobuf(msg)
 	if err != nil {
 		return err
 	}
@@ -194,7 +192,7 @@ func (r *PeerRecord) MarshalRecord() (res []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
-	return proto.Marshal(msg)
+	return msg.MarshalVT()
 }
 
 // Equal returns true if the other PeerRecord is identical to this one.

@@ -4,3 +4,7 @@
 *.sqlog
 *.qlog.zst
 *.sqlog.zst
+.tools/
+vendor/
+node_modules
+yarn.lock

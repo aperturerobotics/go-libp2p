@@ -13,7 +13,6 @@ import (
 	blhost "github.com/libp2p/go-libp2p/p2p/host/blank"
 	swarmt "github.com/libp2p/go-libp2p/p2p/net/swarm/testing"
 	ma "github.com/multiformats/go-multiaddr"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -154,12 +153,12 @@ func TestInvalidSignedPeerRecord(t *testing.T) {
 	require.NoError(t, err)
 
 	var envPb recordPb.Envelope
-	err = proto.Unmarshal(marshalled, &envPb)
+	err = envPb.UnmarshalVT(marshalled)
 	require.NoError(t, err)
 
 	envPb.Signature = []byte("invalid")
 
-	mes.SignedPeerRecord, err = proto.Marshal(&envPb)
+	mes.SignedPeerRecord, err = (&envPb).MarshalVT()
 	require.NoError(t, err)
 
 	err = ids2.writeChunkedIdentifyMsg(s, mes)

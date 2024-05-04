@@ -1,8 +1,7 @@
-syntax = "proto2";
-
+syntax = "proto3";
 package crypto.pb;
 
-option go_package = "github.com/libp2p/go-libp2p/core/crypto/pb";
+option go_package = "github.com/libp2p/go-libp2p/core/crypto/pb;pb";
 
 enum KeyType {
 	RSA = 0;
@@ -12,11 +11,11 @@ enum KeyType {
 }
 
 message PublicKey {
-	required KeyType Type = 1;
-	required bytes Data = 2;
+	KeyType Type = 1;
+	bytes Data = 2;
 }
 
 message PrivateKey {
-	required KeyType Type = 1;
-	required bytes Data = 2;
+	KeyType Type = 1;
+	bytes Data = 2;
 }

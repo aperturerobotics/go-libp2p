@@ -11,6 +11,7 @@ import (
 
 	"golang.org/x/exp/slices"
 
+	protobuf_go_lite "github.com/aperturerobotics/protobuf-go-lite"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -20,14 +21,13 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/libp2p/go-libp2p/core/record"
 	"github.com/libp2p/go-libp2p/p2p/host/eventbus"
-	"github.com/libp2p/go-libp2p/p2p/protocol/identify/pb"
+	pb "github.com/libp2p/go-libp2p/p2p/protocol/identify/pb"
 
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/libp2p/go-msgio/pbio"
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 	msmux "github.com/multiformats/go-multistream"
-	"google.golang.org/protobuf/proto"
 )
 
 //go:generate protoc --proto_path=$PWD:$PWD/../../.. --go_out=. --go_opt=Mpb/identify.proto=./pb pb/identify.proto
@@ -536,14 +536,21 @@ func (ids *idService) handleIdentifyResponse(s network.Stream, isPush bool) erro
 	return nil
 }
 
-func readAllIDMessages(r pbio.Reader, finalMsg proto.Message) error {
+func readAllIDMessages(r pbio.Reader, finalMsg protobuf_go_lite.Message) error {
 	mes := &pb.Identify{}
 	for i := 0; i < maxMessages; i++ {
 		switch err := r.ReadMsg(mes); err {
 		case io.EOF:
 			return nil
 		case nil:
-			proto.Merge(finalMsg, mes)
+			// proto.Merge(finalMsg, mes)
+			mesData, err := mes.MarshalVT()
+			if err != nil {
+				return err
+			}
+			if err := finalMsg.UnmarshalVT(mesData); err != nil {
+				return err
+			}
 		default:
 			return err
 		}
@@ -585,7 +592,7 @@ func (ids *idService) updateSnapshot() (updated bool) {
 func (ids *idService) writeChunkedIdentifyMsg(s network.Stream, mes *pb.Identify) error {
 	writer := pbio.NewDelimitedWriter(s)
 
-	if mes.SignedPeerRecord == nil || proto.Size(mes) <= legacyIDSize {
+	if mes.SignedPeerRecord == nil || mes.SizeVT() <= legacyIDSize {
 		return writer.WriteMsg(mes)
 	}
 

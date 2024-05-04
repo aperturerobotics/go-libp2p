@@ -16,7 +16,6 @@ import (
 
 	"github.com/flynn/noise"
 	pool "github.com/libp2p/go-buffer-pool"
-	"google.golang.org/protobuf/proto"
 )
 
 //go:generate protoc --go_out=. --go_opt=Mpb/payload.proto=./pb pb/payload.proto
@@ -234,11 +233,11 @@ func (s *secureSession) generateHandshakePayload(localStatic noise.DHKey, ext *p
 	}
 
 	// create payload
-	payloadEnc, err := proto.Marshal(&pb.NoiseHandshakePayload{
+	payloadEnc, err := (&pb.NoiseHandshakePayload{
 		IdentityKey: localKeyRaw,
 		IdentitySig: signedPayload,
 		Extensions:  ext,
-	})
+	}).MarshalVT()
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling handshake payload: %w", err)
 	}
@@ -251,7 +250,7 @@ func (s *secureSession) generateHandshakePayload(localStatic noise.DHKey, ext *p
 func (s *secureSession) handleRemoteHandshakePayload(payload []byte, remoteStatic []byte) (*pb.NoiseExtensions, error) {
 	// unmarshal payload
 	nhp := new(pb.NoiseHandshakePayload)
-	err := proto.Unmarshal(payload, nhp)
+	err := nhp.UnmarshalVT(payload)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshaling remote handshake payload: %w", err)
 	}

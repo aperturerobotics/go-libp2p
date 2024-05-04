@@ -26,7 +26,6 @@ import (
 	"time"
 
 	mrand "golang.org/x/exp/rand"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	ic "github.com/libp2p/go-libp2p/core/crypto"
@@ -604,7 +603,7 @@ func newWebRTCConnection(settings webrtc.SettingEngine, config webrtc.Configurat
 			case incomingDataChannels <- dataChannel{rwc, dc}:
 			default:
 				log.Warnf("connection busy, rejecting stream")
-				b, _ := proto.Marshal(&pb.Message{Flag: pb.Message_RESET.Enum()})
+				b, _ := (&pb.Message{Flag: pb.Message_RESET.Enum()}).MarshalVT()
 				w := msgio.NewWriter(rwc)
 				w.WriteMsg(b)
 				rwc.Close()
