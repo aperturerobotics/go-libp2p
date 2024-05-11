@@ -16,14 +16,16 @@ import (
 //go:generate protoc --go_out=. --go_opt=Mpb/crypto.proto=./pb pb/crypto.proto
 
 const (
-	// RSA is an enum for the supported RSA key type
+	// RSA is the RSA key type
 	RSA = iota
-	// Ed25519 is an enum for the supported Ed25519 key type
+	// Ed25519 is the Ed25519 key type
 	Ed25519
-	// Secp256k1 is an enum for the supported Secp256k1 key type
+	// Secp256k1 is the Secp256k1 key type
 	Secp256k1
-	// ECDSA is an enum for the supported ECDSA key type
+	// ECDSA is the ECDSA key type
 	ECDSA
+	// EdDilithium3 is the hybrid Dilithium3 with Ed448 key type.
+	EdDilithium3
 )
 
 var (
@@ -35,6 +37,7 @@ var (
 		Ed25519,
 		Secp256k1,
 		ECDSA,
+		EdDilithium3,
 	}
 )
 
@@ -46,18 +49,20 @@ type PrivKeyUnmarshaller func(data []byte) (PrivKey, error)
 
 // PubKeyUnmarshallers is a map of unmarshallers by key type
 var PubKeyUnmarshallers = map[pb.KeyType]PubKeyUnmarshaller{
-	pb.KeyType_RSA:       UnmarshalRsaPublicKey,
-	pb.KeyType_Ed25519:   UnmarshalEd25519PublicKey,
-	pb.KeyType_Secp256k1: UnmarshalSecp256k1PublicKey,
-	pb.KeyType_ECDSA:     UnmarshalECDSAPublicKey,
+	pb.KeyType_RSA:          UnmarshalRsaPublicKey,
+	pb.KeyType_Ed25519:      UnmarshalEd25519PublicKey,
+	pb.KeyType_Secp256k1:    UnmarshalSecp256k1PublicKey,
+	pb.KeyType_ECDSA:        UnmarshalECDSAPublicKey,
+	pb.KeyType_EdDilithium3: UnmarshalEdDilithium3PublicKey,
 }
 
 // PrivKeyUnmarshallers is a map of unmarshallers by key type
 var PrivKeyUnmarshallers = map[pb.KeyType]PrivKeyUnmarshaller{
-	pb.KeyType_RSA:       UnmarshalRsaPrivateKey,
-	pb.KeyType_Ed25519:   UnmarshalEd25519PrivateKey,
-	pb.KeyType_Secp256k1: UnmarshalSecp256k1PrivateKey,
-	pb.KeyType_ECDSA:     UnmarshalECDSAPrivateKey,
+	pb.KeyType_RSA:          UnmarshalRsaPrivateKey,
+	pb.KeyType_Ed25519:      UnmarshalEd25519PrivateKey,
+	pb.KeyType_Secp256k1:    UnmarshalSecp256k1PrivateKey,
+	pb.KeyType_ECDSA:        UnmarshalECDSAPrivateKey,
+	pb.KeyType_EdDilithium3: UnmarshalEdDilithium3PrivateKey,
 }
 
 // Key represents a crypto key that can be compared to another key
@@ -113,6 +118,8 @@ func GenerateKeyPairWithReader(typ, bits int, src io.Reader) (PrivKey, PubKey, e
 		return GenerateSecp256k1Key(src)
 	case ECDSA:
 		return GenerateECDSAKeyPair(src)
+	case EdDilithium3:
+		return GenerateEdDilithium3Key(src)
 	default:
 		return nil, nil, ErrBadKeyType
 	}
