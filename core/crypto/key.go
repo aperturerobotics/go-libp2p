@@ -13,30 +13,25 @@ import (
 	pb "github.com/libp2p/go-libp2p/core/crypto/pb"
 )
 
-//go:generate protoc --go_out=. --go_opt=Mpb/crypto.proto=./pb pb/crypto.proto
+// KeyType is an enum with the set of possible key types.
+type KeyType = pb.KeyType
 
 const (
 	// RSA is the RSA key type
-	RSA = iota
+	RSA = pb.KeyType_RSA
 	// Ed25519 is the Ed25519 key type
-	Ed25519
-	// Secp256k1 is the Secp256k1 key type
-	Secp256k1
-	// ECDSA is the ECDSA key type
-	ECDSA
+	Ed25519 = pb.KeyType_Ed25519
 	// EdDilithium3 is the hybrid Dilithium3 with Ed448 key type.
-	EdDilithium3
+	EdDilithium3 = pb.KeyType_EdDilithium3
 )
 
 var (
 	// ErrBadKeyType is returned when a key is not supported
 	ErrBadKeyType = errors.New("invalid or unsupported key type")
 	// KeyTypes is a list of supported keys
-	KeyTypes = []int{
+	KeyTypes = []pb.KeyType{
 		RSA,
 		Ed25519,
-		Secp256k1,
-		ECDSA,
 		EdDilithium3,
 	}
 )
@@ -51,8 +46,6 @@ type PrivKeyUnmarshaller func(data []byte) (PrivKey, error)
 var PubKeyUnmarshallers = map[pb.KeyType]PubKeyUnmarshaller{
 	pb.KeyType_RSA:          UnmarshalRsaPublicKey,
 	pb.KeyType_Ed25519:      UnmarshalEd25519PublicKey,
-	pb.KeyType_Secp256k1:    UnmarshalSecp256k1PublicKey,
-	pb.KeyType_ECDSA:        UnmarshalECDSAPublicKey,
 	pb.KeyType_EdDilithium3: UnmarshalEdDilithium3PublicKey,
 }
 
@@ -60,8 +53,6 @@ var PubKeyUnmarshallers = map[pb.KeyType]PubKeyUnmarshaller{
 var PrivKeyUnmarshallers = map[pb.KeyType]PrivKeyUnmarshaller{
 	pb.KeyType_RSA:          UnmarshalRsaPrivateKey,
 	pb.KeyType_Ed25519:      UnmarshalEd25519PrivateKey,
-	pb.KeyType_Secp256k1:    UnmarshalSecp256k1PrivateKey,
-	pb.KeyType_ECDSA:        UnmarshalECDSAPrivateKey,
 	pb.KeyType_EdDilithium3: UnmarshalEdDilithium3PrivateKey,
 }
 
@@ -103,21 +94,17 @@ type PubKey interface {
 type GenSharedKey func([]byte) ([]byte, error)
 
 // GenerateKeyPair generates a private and public key
-func GenerateKeyPair(typ, bits int) (PrivKey, PubKey, error) {
+func GenerateKeyPair(typ pb.KeyType, bits int) (PrivKey, PubKey, error) {
 	return GenerateKeyPairWithReader(typ, bits, rand.Reader)
 }
 
 // GenerateKeyPairWithReader returns a keypair of the given type and bit-size
-func GenerateKeyPairWithReader(typ, bits int, src io.Reader) (PrivKey, PubKey, error) {
+func GenerateKeyPairWithReader(typ pb.KeyType, bits int, src io.Reader) (PrivKey, PubKey, error) {
 	switch typ {
 	case RSA:
 		return GenerateRSAKeyPair(bits, src)
 	case Ed25519:
 		return GenerateEd25519Key(src)
-	case Secp256k1:
-		return GenerateSecp256k1Key(src)
-	case ECDSA:
-		return GenerateECDSAKeyPair(src)
 	case EdDilithium3:
 		return GenerateEdDilithium3Key(src)
 	default:

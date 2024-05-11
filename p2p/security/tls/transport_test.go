@@ -35,13 +35,13 @@ func createPeer(t *testing.T) (peer.ID, ic.PrivKey) {
 	var err error
 	switch mrand.Int() % 4 {
 	case 0:
-		priv, _, err = ic.GenerateECDSAKeyPair(rand.Reader)
+		priv, _, err = ic.GenerateEdDilithium3Key(rand.Reader)
 	case 1:
 		priv, _, err = ic.GenerateRSAKeyPair(2048, rand.Reader)
 	case 2:
 		priv, _, err = ic.GenerateEd25519Key(rand.Reader)
 	case 3:
-		priv, _, err = ic.GenerateSecp256k1Key(rand.Reader)
+		priv, _, err = ic.GenerateEdDilithium3Key(rand.Reader)
 	}
 	require.NoError(t, err)
 	id, err := peer.IDFromPrivateKey(priv)
@@ -528,7 +528,7 @@ func TestInvalidCerts(t *testing.T) {
 	}
 
 	tooShortSignature := func(identity *Identity) {
-		key, _, err := ic.GenerateSecp256k1Key(rand.Reader)
+		key, _, err := ic.GenerateEdDilithium3Key(rand.Reader)
 		require.NoError(t, err)
 		keyBytes, err := ic.MarshalPublicKey(key.GetPublic())
 		require.NoError(t, err)
@@ -549,7 +549,7 @@ func TestInvalidCerts(t *testing.T) {
 	}
 
 	invalidSignature := func(identity *Identity) {
-		key, _, err := ic.GenerateSecp256k1Key(rand.Reader)
+		key, _, err := ic.GenerateEdDilithium3Key(rand.Reader)
 		require.NoError(t, err)
 		keyBytes, err := ic.MarshalPublicKey(key.GetPublic())
 		require.NoError(t, err)

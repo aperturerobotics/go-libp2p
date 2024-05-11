@@ -4,6 +4,7 @@
 *.sqlog
 *.qlog.zst
 *.sqlog.zst
+.aider*
 .tools/
 vendor/
 node_modules

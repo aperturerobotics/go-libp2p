@@ -1,6 +1,10 @@
 package crypto
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/libp2p/go-libp2p/core/crypto/pb"
+)
 
 func BenchmarkSignRSA1B(b *testing.B)      { RunBenchmarkSignRSA(b, 1) }
 func BenchmarkSignRSA10B(b *testing.B)     { RunBenchmarkSignRSA(b, 10) }
@@ -30,6 +34,20 @@ func BenchmarkVerifyEd255191000B(b *testing.B)   { RunBenchmarkVerifyEd25519(b, 
 func BenchmarkVerifyEd2551910000B(b *testing.B)  { RunBenchmarkVerifyEd25519(b, 10000) }
 func BenchmarkVerifyEd25519100000B(b *testing.B) { RunBenchmarkVerifyEd25519(b, 100000) }
 
+func BenchmarkSignEdDilithium31B(b *testing.B)      { RunBenchmarkSignEdDilithium3(b, 1) }
+func BenchmarkSignEdDilithium310B(b *testing.B)     { RunBenchmarkSignEdDilithium3(b, 10) }
+func BenchmarkSignEdDilithium3100B(b *testing.B)    { RunBenchmarkSignEdDilithium3(b, 100) }
+func BenchmarkSignEdDilithium31000B(b *testing.B)   { RunBenchmarkSignEdDilithium3(b, 1000) }
+func BenchmarkSignEdDilithium310000B(b *testing.B)  { RunBenchmarkSignEdDilithium3(b, 10000) }
+func BenchmarkSignEdDilithium3100000B(b *testing.B) { RunBenchmarkSignEdDilithium3(b, 100000) }
+
+func BenchmarkVerifyEdDilithium31B(b *testing.B)      { RunBenchmarkVerifyEdDilithium3(b, 1) }
+func BenchmarkVerifyEdDilithium310B(b *testing.B)     { RunBenchmarkVerifyEdDilithium3(b, 10) }
+func BenchmarkVerifyEdDilithium3100B(b *testing.B)    { RunBenchmarkVerifyEdDilithium3(b, 100) }
+func BenchmarkVerifyEdDilithium31000B(b *testing.B)   { RunBenchmarkVerifyEdDilithium3(b, 1000) }
+func BenchmarkVerifyEdDilithium310000B(b *testing.B)  { RunBenchmarkVerifyEdDilithium3(b, 10000) }
+func BenchmarkVerifyEdDilithium3100000B(b *testing.B) { RunBenchmarkVerifyEdDilithium3(b, 100000) }
+
 func RunBenchmarkSignRSA(b *testing.B, numBytes int) {
 	runBenchmarkSign(b, numBytes, RSA)
 }
@@ -38,8 +56,18 @@ func RunBenchmarkSignEd25519(b *testing.B, numBytes int) {
 	runBenchmarkSign(b, numBytes, Ed25519)
 }
 
-func runBenchmarkSign(b *testing.B, numBytes int, t int) {
-	secret, _, err := GenerateKeyPair(t, 2048)
+func RunBenchmarkSignEdDilithium3(b *testing.B, numBytes int) {
+	runBenchmarkSign(b, numBytes, EdDilithium3)
+}
+
+func runBenchmarkSign(b *testing.B, numBytes int, t pb.KeyType) {
+	var secret PrivKey
+	var err error
+	if t == EdDilithium3 {
+		secret, _, err = GenerateKeyPair(t, 0)
+	} else {
+		secret, _, err = GenerateKeyPair(t, 2048)
+	}
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -61,7 +89,11 @@ func RunBenchmarkVerifyEd25519(b *testing.B, numBytes int) {
 	runBenchmarkVerify(b, numBytes, Ed25519)
 }
 
-func runBenchmarkVerify(b *testing.B, numBytes int, t int) {
+func RunBenchmarkVerifyEdDilithium3(b *testing.B, numBytes int) {
+	runBenchmarkVerify(b, numBytes, EdDilithium3)
+}
+
+func runBenchmarkVerify(b *testing.B, numBytes int, t pb.KeyType) {
 	secret, public, err := GenerateKeyPair(t, 2048)
 	if err != nil {
 		b.Fatal(err)

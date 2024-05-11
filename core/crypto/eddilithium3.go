@@ -100,6 +100,11 @@ func (k *EdDilithium3PublicKey) Verify(data []byte, sig []byte) (success bool, e
 			success = false
 		}
 	}()
+
+	if len(sig) != eddilithium3.SignatureSize {
+		return false, errors.New("expect eddilithium3 signature size to be " + strconv.Itoa(eddilithium3.SignatureSize))
+	}
+
 	return eddilithium3.Verify(k.k, data, sig), nil
 }
 

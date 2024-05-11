@@ -6,9 +6,10 @@ option go_package = "github.com/libp2p/go-libp2p/core/crypto/pb;pb";
 enum KeyType {
 	RSA = 0;
 	Ed25519 = 1;
-	Secp256k1 = 2;
-	ECDSA = 3;
-  EdDilithium3 = 4;
+  EdDilithium2 = 4;
+  EdDilithium3 = 5;
+
+  // reserved 2, 3
 }
 
 message PublicKey {

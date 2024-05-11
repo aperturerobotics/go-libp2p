@@ -22,20 +22,21 @@ type testCase struct {
 
 var keyTypes = []testCase{
 	{
-		keyType: crypto_pb.KeyType_ECDSA,
-		gen:     crypto.GenerateECDSAKeyPair,
-	},
-	{
-		keyType:          crypto_pb.KeyType_Secp256k1,
-		sigDeterministic: true,
-		gen:              crypto.GenerateSecp256k1Key,
-	},
-	{
 		keyType:          crypto_pb.KeyType_RSA,
 		sigDeterministic: true,
 		gen: func(i io.Reader) (crypto.PrivKey, crypto.PubKey, error) {
 			return crypto.GenerateRSAKeyPair(2048, i)
 		},
+	},
+	{
+		keyType:          crypto_pb.KeyType_Ed25519,
+		sigDeterministic: true,
+		gen:              crypto.GenerateEd25519Key,
+	},
+	{
+		keyType:          crypto_pb.KeyType_EdDilithium3,
+		sigDeterministic: true,
+		gen:              crypto.GenerateEdDilithium3Key,
 	},
 }
 
