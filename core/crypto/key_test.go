@@ -3,9 +3,7 @@ package crypto_test
 import (
 	"bytes"
 	"crypto"
-	"crypto/ecdsa"
 	"crypto/ed25519"
-	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -19,9 +17,6 @@ import (
 	. "github.com/libp2p/go-libp2p/core/crypto"
 	pb "github.com/libp2p/go-libp2p/core/crypto/pb"
 	"github.com/libp2p/go-libp2p/core/test"
-
-	"github.com/decred/dcrd/dcrec/secp256k1/v4"
-	secp256k1ecdsa "github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
 )
 
 func TestKeys(t *testing.T) {
@@ -35,21 +30,6 @@ func TestKeyPairFromKey(t *testing.T) {
 		data   = []byte(`hello world`)
 		hashed = sha256.Sum256(data)
 	)
-
-	privk, err := secp256k1.GeneratePrivateKey()
-	if err != nil {
-		t.Fatalf("err generating btcec priv key:\n%v", err)
-	}
-	sigK := secp256k1ecdsa.Sign(privk, hashed[:])
-
-	eKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatalf("err generating ecdsa priv key:\n%v", err)
-	}
-	sigE, err := eKey.Sign(rand.Reader, hashed[:], crypto.SHA256)
-	if err != nil {
-		t.Fatalf("err generating ecdsa sig:\n%v", err)
-	}
 
 	rKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
@@ -78,16 +58,6 @@ func TestKeyPairFromKey(t *testing.T) {
 		typ pb.KeyType
 		sig []byte
 	}{
-		{
-			eKey,
-			ECDSA,
-			sigE,
-		},
-		{
-			privk,
-			Secp256k1,
-			sigK.Serialize(),
-		},
 		{
 			rKey,
 			RSA,
@@ -135,8 +105,6 @@ func TestKeyPairFromKey(t *testing.T) {
 			var stdPubBytes []byte
 
 			switch p := stdPub.(type) {
-			case *Secp256k1PublicKey:
-				stdPubBytes, err = p.Raw()
 			case ed25519.PublicKey:
 				stdPubBytes = []byte(p)
 			case *eddilithium3.PublicKey:
@@ -165,10 +133,6 @@ func TestKeyPairFromKey(t *testing.T) {
 			var stdPrivBytes []byte
 
 			switch p := stdPriv.(type) {
-			case *Secp256k1PrivateKey:
-				stdPrivBytes, err = p.Raw()
-			case *ecdsa.PrivateKey:
-				stdPrivBytes, err = x509.MarshalECPrivateKey(p)
 			case *ed25519.PrivateKey:
 				stdPrivBytes = *p
 			case *eddilithium3.PrivateKey:
@@ -282,19 +246,9 @@ func testKeyEncoding(t *testing.T, sk PrivKey) {
 }
 
 func testKeyEquals(t *testing.T, k Key) {
-	// kb, err := k.Raw()
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
-
 	if !KeyEqual(k, k) {
 		t.Fatal("Key not equal to itself.")
 	}
-
-	// bad test, relies on deep internals..
-	// if !KeyEqual(k, testkey(kb)) {
-	// 	t.Fatal("Key not equal to key with same bytes.")
-	// }
 
 	sk, pk, err := test.RandTestKeyPair(RSA, 2048)
 	if err != nil {
