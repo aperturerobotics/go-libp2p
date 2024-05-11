@@ -37,6 +37,21 @@ var keyTypes = []testCase{
 			return crypto.GenerateRSAKeyPair(2048, i)
 		},
 	},
+	{
+		keyType:          crypto.Ed25519,
+		sigDeterministic: true,
+		gen:              crypto.GenerateEd25519Key,
+	},
+	{
+		keyType:          crypto.EdDilithium2,
+		sigDeterministic: true,
+		gen:              crypto.GenerateEdDilithium2Key,
+	},
+	{
+		keyType:          crypto.EdDilithium3,
+		sigDeterministic: true,
+		gen:              crypto.GenerateEdDilithium3Key,
+	},
 }
 
 func fname(kt crypto_pb.KeyType, ext string) string {

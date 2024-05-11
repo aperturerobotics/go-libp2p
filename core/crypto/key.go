@@ -13,28 +13,35 @@ import (
 	pb "github.com/libp2p/go-libp2p/core/crypto/pb"
 )
 
-//go:generate protoc --go_out=. --go_opt=Mpb/crypto.proto=./pb pb/crypto.proto
+// KeyType is an enum with the set of possible key types.
+type KeyType = pb.KeyType
 
 const (
-	// RSA is an enum for the supported RSA key type
-	RSA = iota
-	// Ed25519 is an enum for the supported Ed25519 key type
-	Ed25519
-	// Secp256k1 is an enum for the supported Secp256k1 key type
-	Secp256k1
-	// ECDSA is an enum for the supported ECDSA key type
-	ECDSA
+	// RSA is the RSA key type
+	RSA = pb.KeyType_RSA
+	// Ed25519 is the Ed25519 key type
+	Ed25519 = pb.KeyType_Ed25519
+	// Secp256k1 is the Secp256k1 key type
+	Secp256k1 = pb.KeyType_Secp256k1
+	// ECDSA is the ECDSA key type
+	ECDSA = pb.KeyType_ECDSA
+	// EdDilithium2 is the hybrid Dilithium2 with Ed255 key type.
+	EdDilithium2 = pb.KeyType_EdDilithium2
+	// EdDilithium3 is the hybrid Dilithium3 with Ed448 key type.
+	EdDilithium3 = pb.KeyType_EdDilithium3
 )
 
 var (
 	// ErrBadKeyType is returned when a key is not supported
 	ErrBadKeyType = errors.New("invalid or unsupported key type")
 	// KeyTypes is a list of supported keys
-	KeyTypes = []int{
+	KeyTypes = []pb.KeyType{
 		RSA,
 		Ed25519,
 		Secp256k1,
 		ECDSA,
+		EdDilithium2,
+		EdDilithium3,
 	}
 )
 
@@ -46,18 +53,22 @@ type PrivKeyUnmarshaller func(data []byte) (PrivKey, error)
 
 // PubKeyUnmarshallers is a map of unmarshallers by key type
 var PubKeyUnmarshallers = map[pb.KeyType]PubKeyUnmarshaller{
-	pb.KeyType_RSA:       UnmarshalRsaPublicKey,
-	pb.KeyType_Ed25519:   UnmarshalEd25519PublicKey,
-	pb.KeyType_Secp256k1: UnmarshalSecp256k1PublicKey,
-	pb.KeyType_ECDSA:     UnmarshalECDSAPublicKey,
+	pb.KeyType_RSA:          UnmarshalRsaPublicKey,
+	pb.KeyType_Ed25519:      UnmarshalEd25519PublicKey,
+	pb.KeyType_Secp256k1:    UnmarshalSecp256k1PublicKey,
+	pb.KeyType_ECDSA:        UnmarshalECDSAPublicKey,
+	pb.KeyType_EdDilithium2: UnmarshalEdDilithium2PublicKey,
+	pb.KeyType_EdDilithium3: UnmarshalEdDilithium3PublicKey,
 }
 
 // PrivKeyUnmarshallers is a map of unmarshallers by key type
 var PrivKeyUnmarshallers = map[pb.KeyType]PrivKeyUnmarshaller{
-	pb.KeyType_RSA:       UnmarshalRsaPrivateKey,
-	pb.KeyType_Ed25519:   UnmarshalEd25519PrivateKey,
-	pb.KeyType_Secp256k1: UnmarshalSecp256k1PrivateKey,
-	pb.KeyType_ECDSA:     UnmarshalECDSAPrivateKey,
+	pb.KeyType_RSA:          UnmarshalRsaPrivateKey,
+	pb.KeyType_Ed25519:      UnmarshalEd25519PrivateKey,
+	pb.KeyType_Secp256k1:    UnmarshalSecp256k1PrivateKey,
+	pb.KeyType_ECDSA:        UnmarshalECDSAPrivateKey,
+	pb.KeyType_EdDilithium2: UnmarshalEdDilithium2PrivateKey,
+	pb.KeyType_EdDilithium3: UnmarshalEdDilithium3PrivateKey,
 }
 
 // Key represents a crypto key that can be compared to another key
@@ -98,12 +109,12 @@ type PubKey interface {
 type GenSharedKey func([]byte) ([]byte, error)
 
 // GenerateKeyPair generates a private and public key
-func GenerateKeyPair(typ, bits int) (PrivKey, PubKey, error) {
+func GenerateKeyPair(typ pb.KeyType, bits int) (PrivKey, PubKey, error) {
 	return GenerateKeyPairWithReader(typ, bits, rand.Reader)
 }
 
 // GenerateKeyPairWithReader returns a keypair of the given type and bit-size
-func GenerateKeyPairWithReader(typ, bits int, src io.Reader) (PrivKey, PubKey, error) {
+func GenerateKeyPairWithReader(typ pb.KeyType, bits int, src io.Reader) (PrivKey, PubKey, error) {
 	switch typ {
 	case RSA:
 		return GenerateRSAKeyPair(bits, src)
@@ -113,6 +124,10 @@ func GenerateKeyPairWithReader(typ, bits int, src io.Reader) (PrivKey, PubKey, e
 		return GenerateSecp256k1Key(src)
 	case ECDSA:
 		return GenerateECDSAKeyPair(src)
+	case EdDilithium2:
+		return GenerateEdDilithium2Key(src)
+	case EdDilithium3:
+		return GenerateEdDilithium3Key(src)
 	default:
 		return nil, nil, ErrBadKeyType
 	}
