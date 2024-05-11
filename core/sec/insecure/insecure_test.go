@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/crypto/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/sec"
 
@@ -56,7 +57,7 @@ func TestPeerIDMismatchOutbound(t *testing.T) {
 	require.Contains(t, clientErr.Error(), "remote peer sent unexpected peer ID")
 }
 
-func newTestTransport(t *testing.T, typ, bits int) *Transport {
+func newTestTransport(t *testing.T, typ pb.KeyType, bits int) *Transport {
 	priv, pub, err := crypto.GenerateKeyPair(typ, bits)
 	require.NoError(t, err)
 	id, err := peer.IDFromPublicKey(pub)

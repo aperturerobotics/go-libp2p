@@ -14,6 +14,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cloudflare/circl/sign/eddilithium3"
+
 	. "github.com/libp2p/go-libp2p/core/crypto"
 	pb "github.com/libp2p/go-libp2p/core/crypto/pb"
 	"github.com/libp2p/go-libp2p/core/test"
@@ -59,10 +61,17 @@ func TestKeyPairFromKey(t *testing.T) {
 	}
 
 	_, edKey, err := ed25519.GenerateKey(rand.Reader)
-	sigEd := ed25519.Sign(edKey, data[:])
 	if err != nil {
-		t.Fatalf("err generating ed25519 sig:\n%v", err)
+		t.Fatalf("err generating ed25519 key:\n%v", err)
 	}
+	sigEd := ed25519.Sign(edKey, data[:])
+
+	_, edDilithium3Key, err := eddilithium3.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("err generating eddilithium3 key:\n%v", err)
+	}
+	var sigEdDilithium3 [eddilithium3.SignatureSize]byte
+	eddilithium3.SignTo(edDilithium3Key, data[:], sigEdDilithium3[:])
 
 	for i, tt := range []struct {
 		in  crypto.PrivateKey
@@ -88,6 +97,11 @@ func TestKeyPairFromKey(t *testing.T) {
 			&edKey,
 			Ed25519,
 			sigEd,
+		},
+		{
+			edDilithium3Key,
+			EdDilithium3,
+			sigEdDilithium3[:],
 		},
 	} {
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
@@ -125,6 +139,8 @@ func TestKeyPairFromKey(t *testing.T) {
 				stdPubBytes, err = p.Raw()
 			case ed25519.PublicKey:
 				stdPubBytes = []byte(p)
+			case *eddilithium3.PublicKey:
+				stdPubBytes = p.Bytes()
 			default:
 				stdPubBytes, err = x509.MarshalPKIXPublicKey(stdPub)
 			}
@@ -155,6 +171,8 @@ func TestKeyPairFromKey(t *testing.T) {
 				stdPrivBytes, err = x509.MarshalECPrivateKey(p)
 			case *ed25519.PrivateKey:
 				stdPrivBytes = *p
+			case *eddilithium3.PrivateKey:
+				stdPrivBytes = p.Bytes()
 			case *rsa.PrivateKey:
 				stdPrivBytes = x509.MarshalPKCS1PrivateKey(p)
 			}
@@ -175,7 +193,7 @@ func TestKeyPairFromKey(t *testing.T) {
 	}
 }
 
-func testKeyType(typ int, t *testing.T) {
+func testKeyType(typ pb.KeyType, t *testing.T) {
 	bits := 512
 	if typ == RSA {
 		bits = 2048

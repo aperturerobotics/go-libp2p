@@ -6,6 +6,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rsa"
 
+	"github.com/cloudflare/circl/sign/eddilithium3"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 )
 
@@ -32,6 +33,9 @@ func KeyPairFromStdKey(priv crypto.PrivateKey) (PrivKey, PubKey, error) {
 		sPub := Secp256k1PublicKey(*p.PubKey())
 		return &sPriv, &sPub, nil
 
+	case *eddilithium3.PrivateKey:
+		return &EdDilithium3PrivateKey{k: p}, &EdDilithium3PublicKey{k: p.Public().(*eddilithium3.PublicKey)}, nil
+
 	default:
 		return nil, nil, ErrBadKeyType
 	}
@@ -52,6 +56,8 @@ func PrivKeyToStdKey(priv PrivKey) (crypto.PrivateKey, error) {
 		return &p.k, nil
 	case *Secp256k1PrivateKey:
 		return p, nil
+	case *EdDilithium3PrivateKey:
+		return p.k, nil
 	default:
 		return nil, ErrBadKeyType
 	}
@@ -72,6 +78,8 @@ func PubKeyToStdKey(pub PubKey) (crypto.PublicKey, error) {
 		return p.k, nil
 	case *Secp256k1PublicKey:
 		return p, nil
+	case *EdDilithium3PublicKey:
+		return p.k, nil
 	default:
 		return nil, ErrBadKeyType
 	}

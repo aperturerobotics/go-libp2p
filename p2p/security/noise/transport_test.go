@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func newTestTransport(t *testing.T, typ, bits int) *Transport {
+func newTestTransport(t *testing.T, typ crypto.KeyType, bits int) *Transport {
 	priv, pub, err := crypto.GenerateKeyPair(typ, bits)
 	if err != nil {
 		t.Fatal(err)
@@ -38,7 +38,7 @@ func newTestTransport(t *testing.T, typ, bits int) *Transport {
 	}
 }
 
-func newTestTransportWithMuxers(t *testing.T, typ, bits int, muxers []protocol.ID) *Transport {
+func newTestTransportWithMuxers(t *testing.T, typ crypto.KeyType, bits int, muxers []protocol.ID) *Transport {
 	transport := newTestTransport(t, typ, bits)
 	transport.muxers = muxers
 	return transport
