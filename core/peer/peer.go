@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ipfs/go-cid"
 	ic "github.com/libp2p/go-libp2p/core/crypto"
 	b58 "github.com/mr-tron/base58/base58"
-	mc "github.com/multiformats/go-multicodec"
 	mh "github.com/multiformats/go-multihash"
 )
 
@@ -117,46 +115,16 @@ func IDFromBytes(b []byte) (ID, error) {
 	return ID(b), nil
 }
 
-// Decode accepts an encoded peer ID and returns the decoded ID if the input is
-// valid.
+// Decode accepts a base58 encoded peer ID and returns the decoded ID.
 //
-// The encoded peer ID can either be a CID of a key or a raw multihash (identity
-// or sha256-256).
+// The encoded peer ID can be a raw multihash (identity or sha256-256).
 func Decode(s string) (ID, error) {
-	if strings.HasPrefix(s, "Qm") || strings.HasPrefix(s, "1") {
-		// base58 encoded sha256 or identity multihash
-		m, err := mh.FromB58String(s)
-		if err != nil {
-			return "", fmt.Errorf("failed to parse peer ID: %s", err)
-		}
-		return ID(m), nil
-	}
-
-	c, err := cid.Decode(s)
+	// base58 encoded sha256 or identity multihash
+	m, err := mh.FromB58String(s)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse peer ID: %s", err)
 	}
-	return FromCid(c)
-}
-
-// FromCid converts a CID to a peer ID, if possible.
-func FromCid(c cid.Cid) (ID, error) {
-	code := mc.Code(c.Type())
-	if code != mc.Libp2pKey {
-		return "", fmt.Errorf("can't convert CID of type %q to a peer ID", code)
-	}
-	return ID(c.Hash()), nil
-}
-
-// ToCid encodes a peer ID as a CID of the public key.
-//
-// If the peer ID is invalid (e.g., empty), this will return the empty CID.
-func ToCid(id ID) cid.Cid {
-	m, err := mh.Cast([]byte(id))
-	if err != nil {
-		return cid.Cid{}
-	}
-	return cid.NewCidV1(cid.Libp2pKey, m)
+	return ID(m), nil
 }
 
 // IDFromPublicKey returns the Peer ID corresponding to the public key pk.

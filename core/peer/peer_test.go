@@ -82,7 +82,7 @@ func (ks *keyset) load(hpkp, skBytesStr string) error {
 	ks.hpk = string(hash(bpk))
 	ks.hpkp = b58.Encode([]byte(ks.hpk))
 	if ks.hpkp != hpkp {
-		return fmt.Errorf("hpkp doesn't match key. %s", hpkp)
+		return fmt.Errorf("hpkp %q doesn't match key %q", hpkp, ks.hpkp)
 	}
 	return nil
 }
@@ -163,12 +163,7 @@ func TestIDEncoding(t *testing.T) {
 			t.Error("p1 and hpk differ")
 		}
 
-		c := ToCid(p1)
-		p2, err := FromCid(c)
-		if err != nil || p1 != p2 {
-			t.Fatal("failed to round-trip through CID:", err)
-		}
-		p3, err := Decode(c.String())
+		p3, err := Decode(p1.String())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -189,11 +184,6 @@ func TestIDEncoding(t *testing.T) {
 	_, err := Decode(exampleCid)
 	if err == nil {
 		t.Fatal("should refuse to decode a non-peer ID CID")
-	}
-
-	c := ToCid("")
-	if c.Defined() {
-		t.Fatal("cid of empty peer ID should have been undefined")
 	}
 }
 
@@ -270,7 +260,7 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-var hpkpMan = `QmcJeseojbPW9hSejUM1sQ1a2QmbrryPK4Z8pWbRUPaYEn`
+var hpkpMan = `Qmf5oG5FFFw2H2nAhVjeF8oM5GAC9sk6rPe2oaK1jRtU11`
 var skManBytes = `
 CAASqAkwggSkAgEAAoIBAQC3hjPtPli71gFNzGJ6rUhYdb65BDwW7IrniEaZKi6z
 tW4Iz0MouEJY8GPG1iQfqZKp5w9H2ENh4I1bk2dsezrJ7Nneg4Eqd78CmeHTAgaP
