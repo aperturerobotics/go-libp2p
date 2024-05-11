@@ -26,7 +26,7 @@ func RunClient(raddr string, p string) error {
 	if err != nil {
 		return err
 	}
-	priv, _, err := ic.GenerateECDSAKeyPair(rand.Reader)
+	priv, _, err := ic.GenerateEdDilithium3Key(rand.Reader)
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func RunServer(port string, location chan peer.AddrInfo) error {
 	if err != nil {
 		return err
 	}
-	priv, _, err := ic.GenerateECDSAKeyPair(rand.Reader)
+	priv, _, err := ic.GenerateEdDilithium3Key(rand.Reader)
 	if err != nil {
 		return err
 	}

@@ -21,10 +21,6 @@ const (
 	RSA = pb.KeyType_RSA
 	// Ed25519 is the Ed25519 key type
 	Ed25519 = pb.KeyType_Ed25519
-	// Secp256k1 is the Secp256k1 key type
-	Secp256k1 = pb.KeyType_Secp256k1
-	// ECDSA is the ECDSA key type
-	ECDSA = pb.KeyType_ECDSA
 	// EdDilithium2 is the hybrid Dilithium2 with Ed255 key type.
 	EdDilithium2 = pb.KeyType_EdDilithium2
 	// EdDilithium3 is the hybrid Dilithium3 with Ed448 key type.
@@ -38,8 +34,6 @@ var (
 	KeyTypes = []pb.KeyType{
 		RSA,
 		Ed25519,
-		Secp256k1,
-		ECDSA,
 		EdDilithium2,
 		EdDilithium3,
 	}
@@ -55,8 +49,6 @@ type PrivKeyUnmarshaller func(data []byte) (PrivKey, error)
 var PubKeyUnmarshallers = map[pb.KeyType]PubKeyUnmarshaller{
 	pb.KeyType_RSA:          UnmarshalRsaPublicKey,
 	pb.KeyType_Ed25519:      UnmarshalEd25519PublicKey,
-	pb.KeyType_Secp256k1:    UnmarshalSecp256k1PublicKey,
-	pb.KeyType_ECDSA:        UnmarshalECDSAPublicKey,
 	pb.KeyType_EdDilithium2: UnmarshalEdDilithium2PublicKey,
 	pb.KeyType_EdDilithium3: UnmarshalEdDilithium3PublicKey,
 }
@@ -65,8 +57,6 @@ var PubKeyUnmarshallers = map[pb.KeyType]PubKeyUnmarshaller{
 var PrivKeyUnmarshallers = map[pb.KeyType]PrivKeyUnmarshaller{
 	pb.KeyType_RSA:          UnmarshalRsaPrivateKey,
 	pb.KeyType_Ed25519:      UnmarshalEd25519PrivateKey,
-	pb.KeyType_Secp256k1:    UnmarshalSecp256k1PrivateKey,
-	pb.KeyType_ECDSA:        UnmarshalECDSAPrivateKey,
 	pb.KeyType_EdDilithium2: UnmarshalEdDilithium2PrivateKey,
 	pb.KeyType_EdDilithium3: UnmarshalEdDilithium3PrivateKey,
 }
@@ -120,10 +110,6 @@ func GenerateKeyPairWithReader(typ pb.KeyType, bits int, src io.Reader) (PrivKey
 		return GenerateRSAKeyPair(bits, src)
 	case Ed25519:
 		return GenerateEd25519Key(src)
-	case Secp256k1:
-		return GenerateSecp256k1Key(src)
-	case ECDSA:
-		return GenerateECDSAKeyPair(src)
 	case EdDilithium2:
 		return GenerateEdDilithium2Key(src)
 	case EdDilithium3:

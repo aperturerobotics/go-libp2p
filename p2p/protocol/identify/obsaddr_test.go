@@ -29,7 +29,7 @@ type harness struct {
 
 func (h *harness) add(observer ma.Multiaddr) peer.ID {
 	// create a new fake peer.
-	sk, _, err := ic.GenerateECDSAKeyPair(rand.Reader)
+	sk, _, err := ic.GenerateEdDilithium3Key(rand.Reader)
 	if err != nil {
 		h.t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func newHarness(t *testing.T) harness {
 
 func newHarnessWithMa(t *testing.T, listenAddr ma.Multiaddr) harness {
 	mn := mocknet.New()
-	sk, _, err := ic.GenerateECDSAKeyPair(rand.Reader)
+	sk, _, err := ic.GenerateEdDilithium3Key(rand.Reader)
 	require.NoError(t, err)
 	h, err := mn.AddPeer(sk, listenAddr)
 	require.NoError(t, err)

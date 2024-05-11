@@ -57,7 +57,7 @@ func TestPeerIDMismatchOutbound(t *testing.T) {
 	require.Contains(t, clientErr.Error(), "remote peer sent unexpected peer ID")
 }
 
-func newTestTransport(t *testing.T, typ pb.KeyType, bits int) *Transport {
+func newTestTransport(t *testing.T, typ crypto.KeyType, bits int) *Transport {
 	priv, pub, err := crypto.GenerateKeyPair(typ, bits)
 	require.NoError(t, err)
 	id, err := peer.IDFromPublicKey(pub)

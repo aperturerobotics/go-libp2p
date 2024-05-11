@@ -2,13 +2,19 @@ package crypto
 
 import (
 	"crypto"
-	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
+	"errors"
 
 	"github.com/cloudflare/circl/sign/eddilithium2"
 	"github.com/cloudflare/circl/sign/eddilithium3"
-	"github.com/decred/dcrd/dcrec/secp256k1/v4"
+)
+
+var (
+	// ErrNilPrivateKey is returned when a nil private key is provided
+	ErrNilPrivateKey = errors.New("private key is nil")
+	// ErrNilPublicKey is returned when a nil public key is provided
+	ErrNilPublicKey = errors.New("public key is nil")
 )
 
 // KeyPairFromStdKey wraps standard library (and secp256k1) private keys in libp2p/go-libp2p/core/crypto keys
@@ -21,18 +27,10 @@ func KeyPairFromStdKey(priv crypto.PrivateKey) (PrivKey, PubKey, error) {
 	case *rsa.PrivateKey:
 		return &RsaPrivateKey{*p}, &RsaPublicKey{k: p.PublicKey}, nil
 
-	case *ecdsa.PrivateKey:
-		return &ECDSAPrivateKey{p}, &ECDSAPublicKey{&p.PublicKey}, nil
-
 	case *ed25519.PrivateKey:
 		pubIfc := p.Public()
 		pub, _ := pubIfc.(ed25519.PublicKey)
 		return &Ed25519PrivateKey{*p}, &Ed25519PublicKey{pub}, nil
-
-	case *secp256k1.PrivateKey:
-		sPriv := Secp256k1PrivateKey(*p)
-		sPub := Secp256k1PublicKey(*p.PubKey())
-		return &sPriv, &sPub, nil
 
 	case *eddilithium2.PrivateKey:
 		return &EdDilithium2PrivateKey{k: p}, &EdDilithium2PublicKey{k: p.Public().(*eddilithium2.PublicKey)}, nil
@@ -54,12 +52,8 @@ func PrivKeyToStdKey(priv PrivKey) (crypto.PrivateKey, error) {
 	switch p := priv.(type) {
 	case *RsaPrivateKey:
 		return &p.sk, nil
-	case *ECDSAPrivateKey:
-		return p.priv, nil
 	case *Ed25519PrivateKey:
 		return &p.k, nil
-	case *Secp256k1PrivateKey:
-		return p, nil
 	case *EdDilithium2PrivateKey:
 		return p.k, nil
 	case *EdDilithium3PrivateKey:
@@ -78,12 +72,8 @@ func PubKeyToStdKey(pub PubKey) (crypto.PublicKey, error) {
 	switch p := pub.(type) {
 	case *RsaPublicKey:
 		return &p.k, nil
-	case *ECDSAPublicKey:
-		return p.pub, nil
 	case *Ed25519PublicKey:
 		return p.k, nil
-	case *Secp256k1PublicKey:
-		return p, nil
 	case *EdDilithium2PublicKey:
 		return p.k, nil
 	case *EdDilithium3PublicKey:

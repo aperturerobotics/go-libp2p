@@ -20,8 +20,6 @@ type KeyType int32
 const (
 	KeyType_RSA          KeyType = 0
 	KeyType_Ed25519      KeyType = 1
-	KeyType_Secp256k1    KeyType = 2
-	KeyType_ECDSA        KeyType = 3
 	KeyType_EdDilithium2 KeyType = 4
 	KeyType_EdDilithium3 KeyType = 5
 )
@@ -31,16 +29,12 @@ var (
 	KeyType_name = map[int32]string{
 		0: "RSA",
 		1: "Ed25519",
-		2: "Secp256k1",
-		3: "ECDSA",
 		4: "EdDilithium2",
 		5: "EdDilithium3",
 	}
 	KeyType_value = map[string]int32{
 		"RSA":          0,
 		"Ed25519":      1,
-		"Secp256k1":    2,
-		"ECDSA":        3,
 		"EdDilithium2": 4,
 		"EdDilithium3": 5,
 	}
