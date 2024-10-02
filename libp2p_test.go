@@ -5,20 +5,32 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
+	"net"
+	"net/netip"
 	"regexp"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/core/routing"
 	"github.com/libp2p/go-libp2p/core/transport"
+	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/net/swarm"
+	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	tls "github.com/libp2p/go-libp2p/p2p/security/tls"
 	quic "github.com/libp2p/go-libp2p/p2p/transport/quic"
+	"github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
+	libp2pwebrtc "github.com/libp2p/go-libp2p/p2p/transport/webrtc"
 	webtransport "github.com/libp2p/go-libp2p/p2p/transport/webtransport"
 	"go.uber.org/goleak"
 
@@ -86,6 +98,7 @@ func TestInsecure(t *testing.T) {
 func TestDefaultListenAddrs(t *testing.T) {
 	reTCP := regexp.MustCompile("/(ip)[4|6]/((0.0.0.0)|(::))/tcp/")
 	reQUIC := regexp.MustCompile("/(ip)[4|6]/((0.0.0.0)|(::))/udp/([0-9]*)/quic-v1")
+	reWebRTC := regexp.MustCompile("/(ip)[4|6]/((0.0.0.0)|(::))/udp/([0-9]*)/webrtc-direct/certhash/(.*)")
 	reCircuit := regexp.MustCompile("/p2p-circuit")
 
 	// Test 1: Setting the correct listen addresses if userDefined.Transport == nil && userDefined.ListenAddrs == nil
@@ -94,6 +107,7 @@ func TestDefaultListenAddrs(t *testing.T) {
 	for _, addr := range h.Network().ListenAddresses() {
 		if reTCP.FindStringSubmatchIndex(addr.String()) == nil &&
 			reQUIC.FindStringSubmatchIndex(addr.String()) == nil &&
+			reWebRTC.FindStringSubmatchIndex(addr.String()) == nil &&
 			reCircuit.FindStringSubmatchIndex(addr.String()) == nil {
 			t.Error("expected ip4 or ip6 or relay interface")
 		}
@@ -376,14 +390,268 @@ func TestAutoNATService(t *testing.T) {
 	h.Close()
 }
 
+func TestInsecureConstructor(t *testing.T) {
+	h, err := New(
+		EnableNATService(),
+		NoSecurity,
+	)
+	require.NoError(t, err)
+	h.Close()
+
+	h, err = New(
+		NoSecurity,
+	)
+	require.NoError(t, err)
+	h.Close()
+}
+
+func TestAutoNATv2Service(t *testing.T) {
+	h, err := New(EnableAutoNATv2())
+	require.NoError(t, err)
+	h.Close()
+}
+
+func TestDisableIdentifyAddressDiscovery(t *testing.T) {
+	h, err := New(DisableIdentifyAddressDiscovery())
+	require.NoError(t, err)
+	h.Close()
+}
+
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(
 		m,
 		// This will return eventually (5s timeout) but doesn't take a context.
 		goleak.IgnoreAnyFunction("github.com/koron/go-ssdp.Search"),
+		goleak.IgnoreAnyFunction("github.com/pion/sctp.(*Stream).SetReadDeadline.func1"),
 		// Logging & Stats
 		goleak.IgnoreTopFunction("github.com/ipfs/go-log/v2/writer.(*MirrorWriter).logRoutine"),
 		goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"),
 		goleak.IgnoreAnyFunction("github.com/jackpal/go-nat-pmp.(*Client).GetExternalAddress"),
 	)
+}
+
+func TestDialCircuitAddrWithWrappedResourceManager(t *testing.T) {
+	relay, err := New(EnableRelayService(), ForceReachabilityPublic())
+	require.NoError(t, err)
+	defer relay.Close()
+
+	peerBehindRelay, err := New(
+		EnableAutoRelayWithStaticRelays([]peer.AddrInfo{{ID: relay.ID(), Addrs: relay.Addrs()}}),
+		ForceReachabilityPrivate())
+	require.NoError(t, err)
+	defer peerBehindRelay.Close()
+
+	// Use a wrapped resource manager to test that the circuit dialing works
+	// with it. Look at the PR introducing this test for context
+	type wrappedRcmgr struct{ network.ResourceManager }
+	mgr, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(rcmgr.DefaultLimits.AutoScale()))
+	require.NoError(t, err)
+	wmgr := wrappedRcmgr{mgr}
+	h, err := New(ResourceManager(wmgr))
+	require.NoError(t, err)
+	defer h.Close()
+
+	h.Peerstore().AddAddrs(relay.ID(), relay.Addrs(), 10*time.Minute)
+	h.Peerstore().AddAddr(peerBehindRelay.ID(),
+		ma.StringCast(
+			fmt.Sprintf("/p2p/%s/p2p-circuit", relay.ID()),
+		),
+		peerstore.TempAddrTTL,
+	)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+		res := <-ping.Ping(ctx, h, peerBehindRelay.ID())
+		return res.Error == nil
+	}, 5*time.Second, 50*time.Millisecond)
+}
+
+func TestHostAddrsFactoryAddsCerthashes(t *testing.T) {
+	addr := ma.StringCast("/ip4/1.2.3.4/udp/1/quic-v1/webtransport")
+	h, err := New(
+		AddrsFactory(func(m []ma.Multiaddr) []ma.Multiaddr {
+			return []ma.Multiaddr{addr}
+		}),
+	)
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		addrs := h.Addrs()
+		for _, a := range addrs {
+			first, last := ma.SplitFunc(a, func(c ma.Component) bool {
+				return c.Protocol().Code == ma.P_CERTHASH
+			})
+			if addr.Equal(first) && last != nil {
+				return true
+			}
+		}
+		return false
+	}, 5*time.Second, 50*time.Millisecond)
+	h.Close()
+}
+
+func newRandomPort(t *testing.T) string {
+	t.Helper()
+	// Find an available port
+	c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 0})
+	require.NoError(t, err)
+	c.LocalAddr().Network()
+	ipPort := netip.MustParseAddrPort(c.LocalAddr().String())
+	port := strconv.Itoa(int(ipPort.Port()))
+	require.NoError(t, c.Close())
+	return port
+}
+
+func TestWebRTCReuseAddrWithQUIC(t *testing.T) {
+	port := newRandomPort(t)
+	order := [][]string{
+		{"/ip4/127.0.0.1/udp/" + port + "/quic-v1", "/ip4/127.0.0.1/udp/" + port + "/webrtc-direct"},
+		{"/ip4/127.0.0.1/udp/" + port + "/webrtc-direct", "/ip4/127.0.0.1/udp/" + port + "/quic-v1"},
+		// We do not support WebRTC automatically reusing QUIC addresses if port is not specified, yet.
+		// {"/ip4/127.0.0.1/udp/0/webrtc-direct", "/ip4/127.0.0.1/udp/0/quic-v1"},
+	}
+	for i, addrs := range order {
+		t.Run("Order "+strconv.Itoa(i), func(t *testing.T) {
+			h1, err := New(ListenAddrStrings(addrs...), Transport(quic.NewTransport), Transport(libp2pwebrtc.New))
+			require.NoError(t, err)
+			defer h1.Close()
+
+			seenPorts := make(map[string]struct{})
+			for _, addr := range h1.Addrs() {
+				s, err := addr.ValueForProtocol(ma.P_UDP)
+				require.NoError(t, err)
+				seenPorts[s] = struct{}{}
+			}
+			require.Len(t, seenPorts, 1)
+
+			quicClient, err := New(NoListenAddrs, Transport(quic.NewTransport))
+			require.NoError(t, err)
+			defer quicClient.Close()
+
+			webrtcClient, err := New(NoListenAddrs, Transport(libp2pwebrtc.New))
+			require.NoError(t, err)
+			defer webrtcClient.Close()
+
+			for _, client := range []host.Host{quicClient, webrtcClient} {
+				err := client.Connect(context.Background(), peer.AddrInfo{ID: h1.ID(), Addrs: h1.Addrs()})
+				require.NoError(t, err)
+			}
+
+			t.Run("quic client can connect", func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				p := ping.NewPingService(quicClient)
+				resCh := p.Ping(ctx, h1.ID())
+				res := <-resCh
+				require.NoError(t, res.Error)
+			})
+
+			t.Run("webrtc client can connect", func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				p := ping.NewPingService(webrtcClient)
+				resCh := p.Ping(ctx, h1.ID())
+				res := <-resCh
+				require.NoError(t, res.Error)
+			})
+		})
+	}
+
+	swapPort := func(addrStrs []string, oldPort, newPort string) []string {
+		out := make([]string, 0, len(addrStrs))
+		for _, addrStr := range addrStrs {
+			out = append(out, strings.Replace(addrStr, oldPort, newPort, 1))
+		}
+		return out
+	}
+
+	t.Run("setup with no reuseport. Should fail", func(t *testing.T) {
+		oldPort := port
+		newPort := newRandomPort(t)
+		h1, err := New(ListenAddrStrings(swapPort(order[0], oldPort, newPort)...), Transport(quic.NewTransport), Transport(libp2pwebrtc.New), QUICReuse(quicreuse.NewConnManager, quicreuse.DisableReuseport()))
+		require.NoError(t, err) // It's a bug/feature that swarm.Listen does not error if at least one transport succeeds in listening.
+		defer h1.Close()
+		// Check that webrtc did fail to listen
+		require.Equal(t, 1, len(h1.Addrs()))
+		require.Contains(t, h1.Addrs()[0].String(), "quic-v1")
+	})
+
+	t.Run("setup with autonat", func(t *testing.T) {
+		oldPort := port
+		newPort := newRandomPort(t)
+		h1, err := New(EnableAutoNATv2(), ListenAddrStrings(swapPort(order[0], oldPort, newPort)...), Transport(quic.NewTransport), Transport(libp2pwebrtc.New), QUICReuse(quicreuse.NewConnManager, quicreuse.DisableReuseport()))
+		require.NoError(t, err) // It's a bug/feature that swarm.Listen does not error if at least one transport succeeds in listening.
+		defer h1.Close()
+		// Check that webrtc did fail to listen
+		require.Equal(t, 1, len(h1.Addrs()))
+		require.Contains(t, h1.Addrs()[0].String(), "quic-v1")
+	})
+}
+
+func TestUseCorrectTransportForDialOut(t *testing.T) {
+	listAddrOrder := [][]string{
+		{"/ip4/127.0.0.1/udp/0/quic-v1", "/ip4/127.0.0.1/udp/0/quic-v1/webtransport"},
+		{"/ip4/127.0.0.1/udp/0/quic-v1/webtransport", "/ip4/127.0.0.1/udp/0/quic-v1"},
+		{"/ip4/0.0.0.0/udp/0/quic-v1", "/ip4/0.0.0.0/udp/0/quic-v1/webtransport"},
+		{"/ip4/0.0.0.0/udp/0/quic-v1/webtransport", "/ip4/0.0.0.0/udp/0/quic-v1"},
+	}
+	for _, order := range listAddrOrder {
+		h1, err := New(ListenAddrStrings(order...), Transport(quic.NewTransport), Transport(webtransport.New))
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			h1.Close()
+		})
+
+		go func() {
+			h1.SetStreamHandler("/echo-port", func(s network.Stream) {
+				m := s.Conn().RemoteMultiaddr()
+				v, err := m.ValueForProtocol(ma.P_UDP)
+				if err != nil {
+					s.Reset()
+					return
+				}
+				s.Write([]byte(v))
+				s.Close()
+			})
+		}()
+
+		for _, addr := range h1.Addrs() {
+			t.Run("order "+strings.Join(order, ",")+" Dial to "+addr.String(), func(t *testing.T) {
+				h2, err := New(ListenAddrStrings(
+					"/ip4/0.0.0.0/udp/0/quic-v1",
+					"/ip4/0.0.0.0/udp/0/quic-v1/webtransport",
+				), Transport(quic.NewTransport), Transport(webtransport.New))
+				require.NoError(t, err)
+				defer h2.Close()
+				t.Log("H2 Addrs", h2.Addrs())
+				var myExpectedDialOutAddr ma.Multiaddr
+				addrIsWT, _ := webtransport.IsWebtransportMultiaddr(addr)
+				isLocal := func(a ma.Multiaddr) bool {
+					return strings.Contains(a.String(), "127.0.0.1")
+				}
+				addrIsLocal := isLocal(addr)
+				for _, a := range h2.Addrs() {
+					aIsWT, _ := webtransport.IsWebtransportMultiaddr(a)
+					if addrIsWT == aIsWT && isLocal(a) == addrIsLocal {
+						myExpectedDialOutAddr = a
+						break
+					}
+				}
+
+				err = h2.Connect(context.Background(), peer.AddrInfo{ID: h1.ID(), Addrs: []ma.Multiaddr{addr}})
+				require.NoError(t, err)
+
+				s, err := h2.NewStream(context.Background(), h1.ID(), "/echo-port")
+				require.NoError(t, err)
+
+				port, err := io.ReadAll(s)
+				require.NoError(t, err)
+
+				myExpectedPort, err := myExpectedDialOutAddr.ValueForProtocol(ma.P_UDP)
+				require.NoError(t, err)
+				require.Equal(t, myExpectedPort, string(port))
+			})
+		}
+	}
 }

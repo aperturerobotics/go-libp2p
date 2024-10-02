@@ -4,6 +4,7 @@ package libp2phttp
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 	logging "github.com/ipfs/go-log/v2"
@@ -29,8 +31,16 @@ import (
 
 var log = logging.Logger("libp2phttp")
 
+var WellKnownRequestTimeout = 30 * time.Second
+
 const ProtocolIDForMultistreamSelect = "/http/1.1"
 const WellKnownProtocols = "/.well-known/libp2p/protocols"
+
+// LegacyWellKnownProtocols refer to a the well-known resource used in an early
+// draft of the libp2p+http spec. Some users have deployed this, and need backwards compatibility.
+// Hopefully we can phase this out in the future. Context: https://github.com/libp2p/go-libp2p/pull/2797
+const LegacyWellKnownProtocols = "/.well-known/libp2p"
+
 const peerMetadataLimit = 8 << 10 // 8KB
 const peerMetadataLRUSize = 256   // How many different peer's metadata to keep in our LRU cache
 
@@ -51,7 +61,7 @@ type WellKnownHandler struct {
 
 // streamHostListen returns a net.Listener that listens on libp2p streams for HTTP/1.1 messages.
 func streamHostListen(streamHost host.Host) (net.Listener, error) {
-	return gostream.Listen(streamHost, ProtocolIDForMultistreamSelect)
+	return gostream.Listen(streamHost, ProtocolIDForMultistreamSelect, gostream.IgnoreEOF())
 }
 
 func (h *WellKnownHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -145,6 +155,17 @@ type Host struct {
 	// here when a user calls `SetHTTPHandler` or `SetHTTPHandlerAtPath`.
 	WellKnownHandler WellKnownHandler
 
+	// EnableCompatibilityWithLegacyWellKnownEndpoint allows compatibility with
+	// an older version of the spec that defined the well-known resource as:
+	// .well-known/libp2p.
+	// For servers, this means hosting the well-known resource at both the
+	// legacy and current paths.
+	// For clients it means making two parallel requests and picking the first one that succeeds.
+	//
+	// Long term this should be deprecated once enough users have upgraded to a
+	// newer go-libp2p version and we can remove all this code.
+	EnableCompatibilityWithLegacyWellKnownEndpoint bool
+
 	// peerMetadata is an LRU cache of a peer's well-known protocol map.
 	peerMetadata *lru.Cache[peer.ID, PeerMeta]
 	// createHTTPTransport is used to lazily create the httpTransport in a thread-safe way.
@@ -206,7 +227,10 @@ var ErrNoListeners = errors.New("nothing to listen on")
 
 func (h *Host) setupListeners(listenerErrCh chan error) error {
 	for _, addr := range h.ListenAddrs {
-		parsedAddr := parseMultiaddr(addr)
+		parsedAddr, err := parseMultiaddr(addr)
+		if err != nil {
+			return err
+		}
 		// resolve the host
 		ipaddr, err := net.ResolveIPAddr("ip", parsedAddr.host)
 		if err != nil {
@@ -272,6 +296,9 @@ func (h *Host) Serve() error {
 
 	h.serveMuxInit()
 	h.ServeMux.Handle(WellKnownProtocols, &h.WellKnownHandler)
+	if h.EnableCompatibilityWithLegacyWellKnownEndpoint {
+		h.ServeMux.Handle(LegacyWellKnownProtocols, &h.WellKnownHandler)
+	}
 
 	h.httpTransportInit()
 
@@ -382,11 +409,14 @@ type PeerMetadataGetter interface {
 }
 
 type streamRoundTripper struct {
-	server      peer.ID
-	addrsAdded  sync.Once
-	serverAddrs []ma.Multiaddr
-	h           host.Host
-	httpHost    *Host
+	server peer.ID
+	// if true, we won't add the server's addresses to the peerstore. This
+	// should only be set when creating the struct.
+	skipAddAddrs bool
+	addrsAdded   sync.Once
+	serverAddrs  []ma.Multiaddr
+	h            host.Host
+	httpHost     *Host
 }
 
 // streamReadCloser wraps an io.ReadCloser and closes the underlying stream when
@@ -405,18 +435,23 @@ func (s *streamReadCloser) Close() error {
 }
 
 func (rt *streamRoundTripper) GetPeerMetadata() (PeerMeta, error) {
-	return rt.httpHost.getAndStorePeerMetadata(rt, rt.server)
+	ctx := context.Background()
+	ctx, cancel := context.WithDeadline(ctx, time.Now().Add(WellKnownRequestTimeout))
+	defer cancel()
+	return rt.httpHost.getAndStorePeerMetadata(ctx, rt, rt.server)
 }
 
 // RoundTrip implements http.RoundTripper.
 func (rt *streamRoundTripper) RoundTrip(r *http.Request) (*http.Response, error) {
 	// Add the addresses we learned about for this server
-	rt.addrsAdded.Do(func() {
-		if len(rt.serverAddrs) > 0 {
-			rt.h.Peerstore().AddAddrs(rt.server, rt.serverAddrs, peerstore.TempAddrTTL)
-		}
-		rt.serverAddrs = nil // may as well cleanup
-	})
+	if !rt.skipAddAddrs {
+		rt.addrsAdded.Do(func() {
+			if len(rt.serverAddrs) > 0 {
+				rt.h.Peerstore().AddAddrs(rt.server, rt.serverAddrs, peerstore.TempAddrTTL)
+			}
+			rt.serverAddrs = nil // may as well cleanup
+		})
+	}
 
 	s, err := rt.h.NewStream(r.Context(), rt.server, ProtocolIDForMultistreamSelect)
 	if err != nil {
@@ -434,14 +469,70 @@ func (rt *streamRoundTripper) RoundTrip(r *http.Request) (*http.Response, error)
 		}
 	}()
 
-	// TODO: Adhere to the request.Context
+	if deadline, ok := r.Context().Deadline(); ok {
+		s.SetReadDeadline(deadline)
+	}
+
 	resp, err := http.ReadResponse(bufio.NewReader(s), r)
 	if err != nil {
+		s.Close()
 		return nil, err
 	}
 	resp.Body = &streamReadCloser{resp.Body, s}
 
+	locUrl, err := resp.Location()
+	if err == nil {
+		// Location url in response. Is this a multiaddr uri? and is it relative?
+		// If it's relative we want to convert it to an absolute multiaddr uri
+		// so that the next request knows how to reach the endpoint.
+		if locUrl.Scheme == "multiaddr" && resp.Request.URL.Scheme == "multiaddr" {
+			// Check if it's a relative URI and turn it into an absolute one
+			u, err := relativeMultiaddrURIToAbs(resp.Request.URL, locUrl)
+			if err == nil {
+				// It was a relative URI and we were able to convert it to an absolute one
+				// Update the location header to be an absolute multiaddr uri
+				resp.Header.Set("Location", u.String())
+			}
+		}
+	}
+
 	return resp, nil
+}
+
+var errNotRelative = errors.New("not relative")
+
+// relativeMultiaddrURIToAbs takes a relative multiaddr URI and turns it into an
+// absolute one. Useful, for example, when a server gives us a relative URI for a redirect.
+// It allows the following request (the one after redirected) to reach the correct server.
+func relativeMultiaddrURIToAbs(original *url.URL, relative *url.URL) (*url.URL, error) {
+	// Is this a relative uri? We know if it is because non-relative URI's of the form:
+	// "multiaddr:/ip4/1.2.3.4/tcp/9899" when parsed by Go's url package will have url.OmitHost == true
+	// But if it is relative (just a path to an http resource e.g. /here-instead)
+	// a redirect will inherit the multiaddr scheme, but set url.OmitHost == false. It will also stringify as something like
+	// multiaddr://here-instead.
+	if relative.OmitHost {
+		// Not relative (at least we can't tell). Nothing we can do here
+		return nil, errNotRelative
+	}
+	originalStr := original.RawPath
+	if originalStr == "" {
+		originalStr = original.Path
+	}
+	originalMa, err := ma.NewMultiaddr(originalStr)
+	if err != nil {
+		return nil, errors.New("original uri is not a multiaddr")
+	}
+
+	relativePathComponent, err := ma.NewComponent("http-path", relative.Path)
+	if err != nil {
+		return nil, errors.New("relative path is not a valid http-path")
+	}
+
+	withoutPath, _ := ma.SplitFunc(originalMa, func(c ma.Component) bool {
+		return c.Protocol().Code == ma.P_HTTP_PATH
+	})
+	withNewPath := withoutPath.Encapsulate(relativePathComponent)
+	return url.Parse("multiaddr:" + withNewPath.String())
 }
 
 // roundTripperForSpecificServer is an http.RoundTripper targets a specific server. Still reuses the underlying RoundTripper for the requests.
@@ -472,7 +563,10 @@ func (rt *roundTripperForSpecificServer) GetPeerMetadata() (PeerMeta, error) {
 		}
 	}
 
-	wk, err := rt.httpHost.getAndStorePeerMetadata(rt, rt.server)
+	ctx := context.Background()
+	ctx, cancel := context.WithDeadline(ctx, time.Now().Add(WellKnownRequestTimeout))
+	defer cancel()
+	wk, err := rt.httpHost.getAndStorePeerMetadata(ctx, rt, rt.server)
 	if err == nil {
 		rt.cachedProtos = wk
 		return wk, nil
@@ -537,7 +631,10 @@ func (rt *namespacedRoundTripper) RoundTrip(r *http.Request) (*http.Response, er
 
 // NamespaceRoundTripper returns an http.RoundTripper that are scoped to the given protocol on the given server.
 func (h *Host) NamespaceRoundTripper(roundtripper http.RoundTripper, p protocol.ID, server peer.ID) (*namespacedRoundTripper, error) {
-	protos, err := h.getAndStorePeerMetadata(roundtripper, server)
+	ctx := context.Background()
+	ctx, cancel := context.WithDeadline(ctx, time.Now().Add(WellKnownRequestTimeout))
+	defer cancel()
+	protos, err := h.getAndStorePeerMetadata(ctx, roundtripper, server)
 	if err != nil {
 		return &namespacedRoundTripper{}, err
 	}
@@ -582,6 +679,98 @@ func (h *Host) NamespacedClient(p protocol.ID, server peer.AddrInfo, opts ...Rou
 	}
 
 	return http.Client{Transport: nrt}, nil
+}
+func (h *Host) initDefaultRT() {
+	h.createDefaultClientRoundTripper.Do(func() {
+		if h.DefaultClientRoundTripper == nil {
+			tr, ok := http.DefaultTransport.(*http.Transport)
+			if ok {
+				h.DefaultClientRoundTripper = tr
+			} else {
+				h.DefaultClientRoundTripper = &http.Transport{}
+			}
+		}
+	})
+}
+
+// RoundTrip implements http.RoundTripper for the HTTP Host.
+// This allows you to use the Host as a Transport for an http.Client.
+// See the example for idomatic usage.
+func (h *Host) RoundTrip(r *http.Request) (*http.Response, error) {
+	switch r.URL.Scheme {
+	case "http", "https":
+		h.initDefaultRT()
+		return h.DefaultClientRoundTripper.RoundTrip(r)
+	case "multiaddr":
+		break
+	default:
+		return nil, fmt.Errorf("unsupported scheme %s", r.URL.Scheme)
+	}
+
+	addr, err := ma.NewMultiaddr(r.URL.String()[len("multiaddr:"):])
+	if err != nil {
+		return nil, err
+	}
+	addr, isHTTP := normalizeHTTPMultiaddr(addr)
+	parsed, err := parseMultiaddr(addr)
+	if err != nil {
+		return nil, err
+	}
+
+	if isHTTP {
+		scheme := "http"
+		if parsed.useHTTPS {
+			scheme = "https"
+		}
+		u := url.URL{
+			Scheme: scheme,
+			Host:   parsed.host + ":" + parsed.port,
+			Path:   parsed.httpPath,
+		}
+		r.URL = &u
+
+		h.initDefaultRT()
+		rt := h.DefaultClientRoundTripper
+		if parsed.sni != parsed.host {
+			// We have a different host and SNI (e.g. using an IP address but specifying a SNI)
+			// We need to make our own transport to support this.
+			//
+			// TODO: if we end up using this code path a lot, we could maintain
+			// a pool of these transports.  For now though, it's here for
+			// completeness, but I don't expect us to hit it often.
+			rt = rt.Clone()
+			rt.TLSClientConfig.ServerName = parsed.sni
+		}
+
+		return rt.RoundTrip(r)
+	}
+
+	if h.StreamHost == nil {
+		return nil, fmt.Errorf("can not do HTTP over streams. Missing StreamHost")
+	}
+
+	if parsed.peer == "" {
+		return nil, fmt.Errorf("no peer ID in multiaddr")
+	}
+	withoutHTTPPath, _ := ma.SplitFunc(addr, func(c ma.Component) bool {
+		return c.Protocol().Code == ma.P_HTTP_PATH
+	})
+	h.StreamHost.Peerstore().AddAddrs(parsed.peer, []ma.Multiaddr{withoutHTTPPath}, peerstore.TempAddrTTL)
+
+	// Set the Opaque field to the http-path so that the HTTP request only makes
+	// a reference to that path and not the whole multiaddr uri
+	r.URL.Opaque = parsed.httpPath
+	if r.Host == "" {
+		// Fill in the host if it's not already set
+		r.Host = parsed.host + ":" + parsed.port
+	}
+	srt := streamRoundTripper{
+		server:       parsed.peer,
+		skipAddAddrs: true,
+		httpHost:     h,
+		h:            h.StreamHost,
+	}
+	return srt.RoundTrip(r)
 }
 
 // NewConstrainedRoundTripper returns an http.RoundTripper that can fulfill and HTTP
@@ -629,17 +818,16 @@ func (h *Host) NewConstrainedRoundTripper(server peer.AddrInfo, opts ...RoundTri
 
 	// Currently the HTTP transport can not authenticate peer IDs.
 	if !options.serverMustAuthenticatePeerID && len(httpAddrs) > 0 && (options.preferHTTPTransport || (firstAddrIsHTTP && !existingStreamConn)) {
-		parsed := parseMultiaddr(httpAddrs[0])
+		parsed, err := parseMultiaddr(httpAddrs[0])
+		if err != nil {
+			return nil, err
+		}
 		scheme := "http"
 		if parsed.useHTTPS {
 			scheme = "https"
 		}
 
-		h.createDefaultClientRoundTripper.Do(func() {
-			if h.DefaultClientRoundTripper == nil {
-				h.DefaultClientRoundTripper = &http.Transport{}
-			}
-		})
+		h.initDefaultRT()
 		rt := h.DefaultClientRoundTripper
 		ownRoundtripper := false
 		if parsed.sni != parsed.host {
@@ -674,15 +862,18 @@ func (h *Host) NewConstrainedRoundTripper(server peer.AddrInfo, opts ...RoundTri
 	return &streamRoundTripper{h: h.StreamHost, server: server.ID, serverAddrs: nonHTTPAddrs, httpHost: h}, nil
 }
 
-type httpMultiaddr struct {
+type explodedMultiaddr struct {
 	useHTTPS bool
 	host     string
 	port     string
 	sni      string
+	httpPath string
+	peer     peer.ID
 }
 
-func parseMultiaddr(addr ma.Multiaddr) httpMultiaddr {
-	out := httpMultiaddr{}
+func parseMultiaddr(addr ma.Multiaddr) (explodedMultiaddr, error) {
+	out := explodedMultiaddr{}
+	var err error
 	ma.ForEach(addr, func(c ma.Component) bool {
 		switch c.Protocol().Code {
 		case ma.P_IP4, ma.P_IP6, ma.P_DNS, ma.P_DNS4, ma.P_DNS6:
@@ -693,15 +884,27 @@ func parseMultiaddr(addr ma.Multiaddr) httpMultiaddr {
 			out.useHTTPS = true
 		case ma.P_SNI:
 			out.sni = c.Value()
-
+		case ma.P_HTTP_PATH:
+			out.httpPath, err = url.QueryUnescape(c.Value())
+			if err == nil && out.httpPath[0] != '/' {
+				out.httpPath = "/" + out.httpPath
+			}
+		case ma.P_P2P:
+			out.peer, err = peer.Decode(c.Value())
 		}
-		return out.host == "" || out.port == "" || !out.useHTTPS || out.sni == ""
+
+		// stop if there is an error, otherwise iterate over all components in case this is a circuit address
+		return err == nil
 	})
 
 	if out.useHTTPS && out.sni == "" {
 		out.sni = out.host
 	}
-	return out
+
+	if out.httpPath == "" {
+		out.httpPath = "/"
+	}
+	return out, err
 }
 
 var httpComponent, _ = ma.NewComponent("http", "")
@@ -722,6 +925,9 @@ func normalizeHTTPMultiaddr(addr ma.Multiaddr) (ma.Multiaddr, bool) {
 		}
 		return false
 	})
+	if beforeHTTPS == nil || !isHTTPMultiaddr {
+		return addr, false
+	}
 
 	if afterIncludingHTTPS == nil {
 		// No HTTPS component, just return the original
@@ -736,10 +942,10 @@ func normalizeHTTPMultiaddr(addr ma.Multiaddr) (ma.Multiaddr, bool) {
 	return ma.Join(beforeHTTPS, tlsComponent, httpComponent, afterHTTPS), isHTTPMultiaddr
 }
 
-// ProtocolPathPrefix looks up the protocol path in the well-known mapping and
+// getAndStorePeerMetadata looks up the protocol path in the well-known mapping and
 // returns it. Will only store the peer's protocol mapping if the server ID is
 // provided.
-func (h *Host) getAndStorePeerMetadata(roundtripper http.RoundTripper, server peer.ID) (PeerMeta, error) {
+func (h *Host) getAndStorePeerMetadata(ctx context.Context, roundtripper http.RoundTripper, server peer.ID) (PeerMeta, error) {
 	if h.peerMetadata == nil {
 		h.peerMetadata = newPeerMetadataCache()
 	}
@@ -747,7 +953,61 @@ func (h *Host) getAndStorePeerMetadata(roundtripper http.RoundTripper, server pe
 		return meta, nil
 	}
 
-	req, err := http.NewRequest("GET", WellKnownProtocols, nil)
+	var meta PeerMeta
+	var err error
+	if h.EnableCompatibilityWithLegacyWellKnownEndpoint {
+		type metaAndErr struct {
+			m   PeerMeta
+			err error
+		}
+		legacyRespCh := make(chan metaAndErr, 1)
+		wellKnownRespCh := make(chan metaAndErr, 1)
+		ctx, cancel := context.WithCancel(ctx)
+		go func() {
+			meta, err := requestPeerMeta(ctx, roundtripper, LegacyWellKnownProtocols)
+			legacyRespCh <- metaAndErr{meta, err}
+		}()
+		go func() {
+			meta, err := requestPeerMeta(ctx, roundtripper, WellKnownProtocols)
+			wellKnownRespCh <- metaAndErr{meta, err}
+		}()
+		select {
+		case resp := <-legacyRespCh:
+			if resp.err != nil {
+				resp = <-wellKnownRespCh
+			}
+			meta, err = resp.m, resp.err
+		case resp := <-wellKnownRespCh:
+			if resp.err != nil {
+				legacyResp := <-legacyRespCh
+				if legacyResp.err != nil {
+					// If both endpoints error, return the error from the well
+					// known resource (not the legacy well known resource)
+					meta, err = resp.m, resp.err
+				} else {
+					meta, err = legacyResp.m, legacyResp.err
+				}
+			} else {
+				meta, err = resp.m, resp.err
+			}
+		}
+		cancel()
+	} else {
+		meta, err = requestPeerMeta(ctx, roundtripper, WellKnownProtocols)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if server != "" {
+		h.peerMetadata.Add(server, meta)
+	}
+
+	return meta, nil
+}
+
+func requestPeerMeta(ctx context.Context, roundtripper http.RoundTripper, wellKnownResource string) (PeerMeta, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", wellKnownResource, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -771,9 +1031,6 @@ func (h *Host) getAndStorePeerMetadata(roundtripper http.RoundTripper, server pe
 	}).Decode(&meta)
 	if err != nil {
 		return nil, err
-	}
-	if server != "" {
-		h.peerMetadata.Add(server, meta)
 	}
 
 	return meta, nil

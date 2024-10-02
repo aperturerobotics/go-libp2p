@@ -137,8 +137,8 @@ func (l *listener) listen() {
 			}
 
 			select {
-			case <-ctx.Done():
-				log.Warn("could not push connection: ctx done")
+			case <-l.ctx.Done():
+				log.Debug("dropping connection, listener closed")
 				conn.Close()
 			case l.acceptQueue <- conn:
 				// acceptQueue is an unbuffered channel, so this blocks until the connection is accepted.
@@ -276,6 +276,7 @@ func (l *listener) setupConnection(
 		remotePubKey,
 		remoteMultiaddr,
 		w.IncomingDataChannels,
+		w.PeerConnectionClosedCh,
 	)
 	if err != nil {
 		return nil, err
@@ -330,7 +331,7 @@ func addOnConnectionStateChangeCallback(pc *webrtc.PeerConnection) <-chan error 
 	errC := make(chan error, 1)
 	var once sync.Once
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
-		switch state {
+		switch pc.ConnectionState() {
 		case webrtc.PeerConnectionStateConnected:
 			once.Do(func() { close(errC) })
 		case webrtc.PeerConnectionStateFailed:

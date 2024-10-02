@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -84,7 +83,15 @@ func TestMultipleClose(t *testing.T) {
 
 	require.NoError(t, h.Close())
 	require.NoError(t, h.Close())
-	require.NoError(t, h.Close())
+	h2, err := NewHost(swarmt.GenSwarm(t), nil)
+	require.NoError(t, err)
+	defer h2.Close()
+	require.Error(t, h.Connect(context.Background(), peer.AddrInfo{ID: h2.ID(), Addrs: h2.Addrs()}))
+	h.Network().Peerstore().AddAddrs(h2.ID(), h2.Addrs(), peerstore.PermanentAddrTTL)
+	_, err = h.NewStream(context.Background(), h2.ID())
+	require.Error(t, err)
+	require.Empty(t, h.Addrs())
+	require.Empty(t, h.AllAddrs())
 }
 
 func TestSignedPeerRecordWithNoListenAddrs(t *testing.T) {
@@ -825,74 +832,54 @@ func TestNormalizeMultiaddr(t *testing.T) {
 	require.Equal(t, "/ip4/1.2.3.4/udp/9999/quic-v1/webtransport", h1.NormalizeMultiaddr(ma.StringCast("/ip4/1.2.3.4/udp/9999/quic-v1/webtransport/certhash/uEgNmb28")).String())
 }
 
-func TestInferWebtransportAddrsFromQuic(t *testing.T) {
+func TestTrimHostAddrList(t *testing.T) {
 	type testCase struct {
-		name string
-		in   []string
-		out  []string
+		name      string
+		in        []ma.Multiaddr
+		threshold int
+		out       []ma.Multiaddr
 	}
+
+	tcpPublic := ma.StringCast("/ip4/1.1.1.1/tcp/1")
+	quicPublic := ma.StringCast("/ip4/1.1.1.1/udp/1/quic-v1")
+
+	tcpPrivate := ma.StringCast("/ip4/192.168.1.1/tcp/1")
+	quicPrivate := ma.StringCast("/ip4/192.168.1.1/udp/1/quic-v1")
+
+	tcpLocal := ma.StringCast("/ip4/127.0.0.1/tcp/1")
+	quicLocal := ma.StringCast("/ip4/127.0.0.1/udp/1/quic-v1")
 
 	testCases := []testCase{
 		{
-			name: "Happy Path",
-			in:   []string{"/ip4/0.0.0.0/udp/9999/quic-v1", "/ip4/0.0.0.0/udp/9999/quic-v1/webtransport", "/ip4/1.2.3.4/udp/9999/quic-v1"},
-			out:  []string{"/ip4/0.0.0.0/udp/9999/quic-v1", "/ip4/0.0.0.0/udp/9999/quic-v1/webtransport", "/ip4/1.2.3.4/udp/9999/quic-v1", "/ip4/1.2.3.4/udp/9999/quic-v1/webtransport"},
+			name:      "Public preferred over private",
+			in:        []ma.Multiaddr{tcpPublic, quicPrivate},
+			threshold: len(tcpLocal.Bytes()),
+			out:       []ma.Multiaddr{tcpPublic},
 		},
 		{
-			name: "Happy Path With CertHashes",
-			in:   []string{"/ip4/0.0.0.0/udp/9999/quic-v1", "/ip4/0.0.0.0/udp/9999/quic-v1/webtransport/certhash/uEgNmb28/certhash/uEgNmb28", "/ip4/1.2.3.4/udp/9999/quic-v1"},
-			out:  []string{"/ip4/0.0.0.0/udp/9999/quic-v1", "/ip4/0.0.0.0/udp/9999/quic-v1/webtransport/certhash/uEgNmb28/certhash/uEgNmb28", "/ip4/1.2.3.4/udp/9999/quic-v1", "/ip4/1.2.3.4/udp/9999/quic-v1/webtransport"},
+			name:      "Public and private preffered over local",
+			in:        []ma.Multiaddr{tcpPublic, tcpPrivate, quicLocal},
+			threshold: len(tcpPublic.Bytes()) + len(tcpPrivate.Bytes()),
+			out:       []ma.Multiaddr{tcpPublic, tcpPrivate},
 		},
 		{
-			name: "Already discovered",
-			in:   []string{"/ip4/0.0.0.0/udp/9999/quic-v1", "/ip4/0.0.0.0/udp/9999/quic-v1/webtransport", "/ip4/1.2.3.4/udp/9999/quic-v1", "/ip4/1.2.3.4/udp/9999/quic-v1/webtransport"},
-			out:  []string{"/ip4/0.0.0.0/udp/9999/quic-v1", "/ip4/0.0.0.0/udp/9999/quic-v1/webtransport", "/ip4/1.2.3.4/udp/9999/quic-v1", "/ip4/1.2.3.4/udp/9999/quic-v1/webtransport"},
+			name:      "quic preferred over tcp",
+			in:        []ma.Multiaddr{tcpPublic, quicPublic},
+			threshold: len(quicPublic.Bytes()),
+			out:       []ma.Multiaddr{quicPublic},
 		},
 		{
-			name: "Infer Many",
-			in:   []string{"/ip4/0.0.0.0/udp/9999/quic-v1", "/ip4/0.0.0.0/udp/9999/quic-v1/webtransport", "/ip4/1.2.3.4/udp/9999/quic-v1", "/ip4/4.3.2.1/udp/9999/quic-v1"},
-			out:  []string{"/ip4/0.0.0.0/udp/9999/quic-v1", "/ip4/0.0.0.0/udp/9999/quic-v1/webtransport", "/ip4/1.2.3.4/udp/9999/quic-v1", "/ip4/4.3.2.1/udp/9999/quic-v1", "/ip4/1.2.3.4/udp/9999/quic-v1/webtransport", "/ip4/4.3.2.1/udp/9999/quic-v1/webtransport"},
+			name:      "no filtering on large threshold",
+			in:        []ma.Multiaddr{tcpPublic, quicPublic, quicLocal, tcpLocal, tcpPrivate},
+			threshold: 10000,
+			out:       []ma.Multiaddr{tcpPublic, quicPublic, quicLocal, tcpLocal, tcpPrivate},
 		},
-		{
-			name: "No Common listeners",
-			in:   []string{"/ip4/0.0.0.0/udp/9999/quic-v1", "/ip4/0.0.0.0/udp/1111/quic-v1/webtransport", "/ip4/1.2.3.4/udp/9999/quic-v1"},
-			out:  []string{"/ip4/0.0.0.0/udp/9999/quic-v1", "/ip4/0.0.0.0/udp/1111/quic-v1/webtransport", "/ip4/1.2.3.4/udp/9999/quic-v1"},
-		},
-		{
-			name: "No WebTransport",
-			in:   []string{"/ip4/0.0.0.0/udp/9999/quic-v1", "/ip4/1.2.3.4/udp/9999/quic-v1"},
-			out:  []string{"/ip4/0.0.0.0/udp/9999/quic-v1", "/ip4/1.2.3.4/udp/9999/quic-v1"},
-		},
-	}
-
-	// Make sure the testCases are all valid multiaddrs
-	for _, tc := range testCases {
-		for _, addr := range tc.in {
-			_, err := ma.NewMultiaddr(addr)
-			require.NoError(t, err)
-		}
-		for _, addr := range tc.out {
-			_, err := ma.NewMultiaddr(addr)
-			require.NoError(t, err)
-		}
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			sort.StringSlice(tc.in).Sort()
-			sort.StringSlice(tc.out).Sort()
-			min := make([]ma.Multiaddr, 0, len(tc.in))
-			for _, addr := range tc.in {
-				min = append(min, ma.StringCast(addr))
-			}
-			outMa := inferWebtransportAddrsFromQuic(min)
-			outStr := make([]string, 0, len(outMa))
-			for _, addr := range outMa {
-				outStr = append(outStr, addr.String())
-			}
-			require.Equal(t, tc.out, outStr)
+			got := trimHostAddrList(tc.in, tc.threshold)
+			require.ElementsMatch(t, got, tc.out)
 		})
-
 	}
-
 }

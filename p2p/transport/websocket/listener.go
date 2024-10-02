@@ -2,16 +2,23 @@ package websocket
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
+	"go.uber.org/zap"
 	"net"
 	"net/http"
-	"strings"
+	"sync"
+
+	logging "github.com/ipfs/go-log/v2"
 
 	"github.com/libp2p/go-libp2p/core/transport"
 
 	ma "github.com/multiformats/go-multiaddr"
 	manet "github.com/multiformats/go-multiaddr/net"
 )
+
+var log = logging.Logger("websocket-transport")
+var stdLog = zap.NewStdLog(log.Desugar())
 
 type listener struct {
 	nl     net.Listener
@@ -22,8 +29,11 @@ type listener struct {
 
 	laddr ma.Multiaddr
 
-	closed   chan struct{}
 	incoming chan *Conn
+
+	closeOnce sync.Once
+	closeErr  error
+	closed    chan struct{}
 }
 
 func (pwma *parsedWebsocketMultiaddr) toMultiaddr() ma.Multiaddr {
@@ -78,7 +88,7 @@ func newListener(a ma.Multiaddr, tlsConf *tls.Config) (*listener, error) {
 		incoming: make(chan *Conn),
 		closed:   make(chan struct{}),
 	}
-	ln.server = http.Server{Handler: ln}
+	ln.server = http.Server{Handler: ln, ErrorLog: stdLog}
 	if parsed.isWSS {
 		ln.isWss = true
 		ln.server.TLSConfig = tlsConf
@@ -122,7 +132,6 @@ func (l *listener) Accept() (manet.Conn, error) {
 			c.Close()
 			return nil, err
 		}
-
 		return mnc, nil
 	case <-l.closed:
 		return nil, transport.ErrListenerClosed
@@ -134,13 +143,13 @@ func (l *listener) Addr() net.Addr {
 }
 
 func (l *listener) Close() error {
-	l.server.Close()
-	err := l.nl.Close()
-	<-l.closed
-	if strings.Contains(err.Error(), "use of closed network connection") {
-		return transport.ErrListenerClosed
-	}
-	return err
+	l.closeOnce.Do(func() {
+		err1 := l.nl.Close()
+		err2 := l.server.Close()
+		<-l.closed
+		l.closeErr = errors.Join(err1, err2)
+	})
+	return l.closeErr
 }
 
 func (l *listener) Multiaddr() ma.Multiaddr {

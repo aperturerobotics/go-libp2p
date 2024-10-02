@@ -12,8 +12,6 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 )
 
-//go:generate protoc --proto_path=$PWD:$PWD/../.. --go_out=. --go_opt=Mpb/peer_record.proto=./pb pb/peer_record.proto
-
 var _ record.Record = (*PeerRecord)(nil)
 
 func init() {
