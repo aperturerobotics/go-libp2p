@@ -45,15 +45,6 @@ func TestMutualAuth(t *testing.T) {
 				return clientKey
 			},
 		},
-		{
-			name: "RSA",
-			clientKeyGen: func(t *testing.T) crypto.PrivKey {
-				t.Helper()
-				clientKey, _, err := crypto.GenerateRSAKeyPair(2048, rand.Reader)
-				require.NoError(t, err)
-				return clientKey
-			},
-		},
 	}
 
 	type serverTestCase struct {

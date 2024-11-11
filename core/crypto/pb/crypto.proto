@@ -4,12 +4,11 @@ package crypto.pb;
 option go_package = "github.com/libp2p/go-libp2p/core/crypto/pb;pb";
 
 enum KeyType {
-	RSA = 0;
+	// RSA = 0;
+  RESERVED = 0;
 	Ed25519 = 1;
-  EdDilithium2 = 4;
-  EdDilithium3 = 5;
 
-  // reserved 2, 3
+  // reserved 0, 2, 3, 4, 5
 }
 
 message PublicKey {

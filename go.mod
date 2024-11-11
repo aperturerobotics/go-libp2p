@@ -17,7 +17,6 @@ require (
 
 require (
 	github.com/benbjohnson/clock v1.3.5
-	github.com/cloudflare/circl v1.3.8
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c
 	github.com/flynn/noise v1.1.0
 	github.com/google/gopacket v1.1.19

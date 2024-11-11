@@ -3,8 +3,6 @@ package libp2pquic
 import (
 	"context"
 	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -25,9 +23,7 @@ import (
 )
 
 func newTransport(t *testing.T, rcmgr network.ResourceManager) tpt.Transport {
-	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-	key, err := ic.UnmarshalRsaPrivateKey(x509.MarshalPKCS1PrivateKey(rsaKey))
+	key, _, err := ic.GenerateEd25519Key(rand.Reader)
 	require.NoError(t, err)
 	tr, err := NewTransport(key, newConnManager(t), nil, nil, rcmgr)
 	require.NoError(t, err)

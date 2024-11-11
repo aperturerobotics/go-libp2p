@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	mrand "math/rand"
 	"net"
 	"sync/atomic"
 	"testing"
@@ -40,18 +39,7 @@ var connTestCases = []*connTestCase{
 }
 
 func createPeer(t *testing.T) (peer.ID, ic.PrivKey) {
-	var priv ic.PrivKey
-	var err error
-	switch mrand.Int() % 4 {
-	case 0:
-		priv, _, err = ic.GenerateEdDilithium3Key(rand.Reader)
-	case 1:
-		priv, _, err = ic.GenerateRSAKeyPair(2048, rand.Reader)
-	case 2:
-		priv, _, err = ic.GenerateEd25519Key(rand.Reader)
-	case 3:
-		priv, _, err = ic.GenerateRSAKeyPair(4096, rand.Reader)
-	}
+	priv, _, err := ic.GenerateEd25519Key(rand.Reader)
 	require.NoError(t, err)
 	id, err := peer.IDFromPrivateKey(priv)
 	require.NoError(t, err)

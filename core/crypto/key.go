@@ -17,14 +17,8 @@ import (
 type KeyType = pb.KeyType
 
 const (
-	// RSA is the RSA key type
-	RSA = pb.KeyType_RSA
 	// Ed25519 is the Ed25519 key type
 	Ed25519 = pb.KeyType_Ed25519
-	// EdDilithium2 is the hybrid Dilithium2 with Ed255 key type.
-	EdDilithium2 = pb.KeyType_EdDilithium2
-	// EdDilithium3 is the hybrid Dilithium3 with Ed448 key type.
-	EdDilithium3 = pb.KeyType_EdDilithium3
 )
 
 var (
@@ -32,10 +26,7 @@ var (
 	ErrBadKeyType = errors.New("invalid or unsupported key type")
 	// KeyTypes is a list of supported keys
 	KeyTypes = []pb.KeyType{
-		RSA,
 		Ed25519,
-		EdDilithium2,
-		EdDilithium3,
 	}
 )
 
@@ -47,18 +38,12 @@ type PrivKeyUnmarshaller func(data []byte) (PrivKey, error)
 
 // PubKeyUnmarshallers is a map of unmarshallers by key type
 var PubKeyUnmarshallers = map[pb.KeyType]PubKeyUnmarshaller{
-	pb.KeyType_RSA:          UnmarshalRsaPublicKey,
-	pb.KeyType_Ed25519:      UnmarshalEd25519PublicKey,
-	pb.KeyType_EdDilithium2: UnmarshalEdDilithium2PublicKey,
-	pb.KeyType_EdDilithium3: UnmarshalEdDilithium3PublicKey,
+	pb.KeyType_Ed25519: UnmarshalEd25519PublicKey,
 }
 
 // PrivKeyUnmarshallers is a map of unmarshallers by key type
 var PrivKeyUnmarshallers = map[pb.KeyType]PrivKeyUnmarshaller{
-	pb.KeyType_RSA:          UnmarshalRsaPrivateKey,
-	pb.KeyType_Ed25519:      UnmarshalEd25519PrivateKey,
-	pb.KeyType_EdDilithium2: UnmarshalEdDilithium2PrivateKey,
-	pb.KeyType_EdDilithium3: UnmarshalEdDilithium3PrivateKey,
+	pb.KeyType_Ed25519: UnmarshalEd25519PrivateKey,
 }
 
 // Key represents a crypto key that can be compared to another key
@@ -106,14 +91,8 @@ func GenerateKeyPair(typ pb.KeyType, bits int) (PrivKey, PubKey, error) {
 // GenerateKeyPairWithReader returns a keypair of the given type and bit-size
 func GenerateKeyPairWithReader(typ pb.KeyType, bits int, src io.Reader) (PrivKey, PubKey, error) {
 	switch typ {
-	case RSA:
-		return GenerateRSAKeyPair(bits, src)
 	case Ed25519:
 		return GenerateEd25519Key(src)
-	case EdDilithium2:
-		return GenerateEdDilithium2Key(src)
-	case EdDilithium3:
-		return GenerateEdDilithium3Key(src)
 	default:
 		return nil, nil, ErrBadKeyType
 	}
@@ -144,14 +123,6 @@ func PublicKeyFromProto(pmes *pb.PublicKey) (PubKey, error) {
 	pk, err := um(data)
 	if err != nil {
 		return nil, err
-	}
-
-	switch tpk := pk.(type) {
-	case *RsaPublicKey:
-		tpk.cached, err = pmes.MarshalVT()
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	return pk, nil

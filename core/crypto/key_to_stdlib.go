@@ -3,11 +3,7 @@ package crypto
 import (
 	"crypto"
 	"crypto/ed25519"
-	"crypto/rsa"
 	"errors"
-
-	"github.com/cloudflare/circl/sign/eddilithium2"
-	"github.com/cloudflare/circl/sign/eddilithium3"
 )
 
 var (
@@ -24,19 +20,10 @@ func KeyPairFromStdKey(priv crypto.PrivateKey) (PrivKey, PubKey, error) {
 	}
 
 	switch p := priv.(type) {
-	case *rsa.PrivateKey:
-		return &RsaPrivateKey{*p}, &RsaPublicKey{k: p.PublicKey}, nil
-
 	case *ed25519.PrivateKey:
 		pubIfc := p.Public()
 		pub, _ := pubIfc.(ed25519.PublicKey)
 		return &Ed25519PrivateKey{*p}, &Ed25519PublicKey{pub}, nil
-
-	case *eddilithium2.PrivateKey:
-		return &EdDilithium2PrivateKey{k: p}, &EdDilithium2PublicKey{k: p.Public().(*eddilithium2.PublicKey)}, nil
-
-	case *eddilithium3.PrivateKey:
-		return &EdDilithium3PrivateKey{k: p}, &EdDilithium3PublicKey{k: p.Public().(*eddilithium3.PublicKey)}, nil
 
 	default:
 		return nil, nil, ErrBadKeyType
@@ -50,14 +37,8 @@ func PrivKeyToStdKey(priv PrivKey) (crypto.PrivateKey, error) {
 	}
 
 	switch p := priv.(type) {
-	case *RsaPrivateKey:
-		return &p.sk, nil
 	case *Ed25519PrivateKey:
 		return &p.k, nil
-	case *EdDilithium2PrivateKey:
-		return p.k, nil
-	case *EdDilithium3PrivateKey:
-		return p.k, nil
 	default:
 		return nil, ErrBadKeyType
 	}
@@ -70,13 +51,7 @@ func PubKeyToStdKey(pub PubKey) (crypto.PublicKey, error) {
 	}
 
 	switch p := pub.(type) {
-	case *RsaPublicKey:
-		return &p.k, nil
 	case *Ed25519PublicKey:
-		return p.k, nil
-	case *EdDilithium2PublicKey:
-		return p.k, nil
-	case *EdDilithium3PublicKey:
 		return p.k, nil
 	default:
 		return nil, ErrBadKeyType

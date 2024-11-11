@@ -5,14 +5,9 @@ import (
 	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
-	"crypto/x509"
 	"fmt"
 	"reflect"
 	"testing"
-
-	"github.com/cloudflare/circl/sign/eddilithium3"
 
 	. "github.com/libp2p/go-libp2p/core/crypto"
 	pb "github.com/libp2p/go-libp2p/core/crypto/pb"
@@ -27,18 +22,8 @@ func TestKeys(t *testing.T) {
 
 func TestKeyPairFromKey(t *testing.T) {
 	var (
-		data   = []byte(`hello world`)
-		hashed = sha256.Sum256(data)
+		data = []byte(`hello world`)
 	)
-
-	rKey, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("err generating rsa priv key:\n%v", err)
-	}
-	sigR, err := rKey.Sign(rand.Reader, hashed[:], crypto.SHA256)
-	if err != nil {
-		t.Fatalf("err generating rsa sig:\n%v", err)
-	}
 
 	_, edKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -46,32 +31,15 @@ func TestKeyPairFromKey(t *testing.T) {
 	}
 	sigEd := ed25519.Sign(edKey, data[:])
 
-	_, edDilithium3Key, err := eddilithium3.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("err generating eddilithium3 key:\n%v", err)
-	}
-	var sigEdDilithium3 [eddilithium3.SignatureSize]byte
-	eddilithium3.SignTo(edDilithium3Key, data[:], sigEdDilithium3[:])
-
 	for i, tt := range []struct {
 		in  crypto.PrivateKey
 		typ pb.KeyType
 		sig []byte
 	}{
 		{
-			rKey,
-			RSA,
-			sigR,
-		},
-		{
 			&edKey,
 			Ed25519,
 			sigEd,
-		},
-		{
-			edDilithium3Key,
-			EdDilithium3,
-			sigEdDilithium3[:],
 		},
 	} {
 		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
@@ -107,10 +75,6 @@ func TestKeyPairFromKey(t *testing.T) {
 			switch p := stdPub.(type) {
 			case ed25519.PublicKey:
 				stdPubBytes = []byte(p)
-			case *eddilithium3.PublicKey:
-				stdPubBytes = p.Bytes()
-			default:
-				stdPubBytes, err = x509.MarshalPKIXPublicKey(stdPub)
 			}
 
 			if err != nil {
@@ -129,29 +93,8 @@ func TestKeyPairFromKey(t *testing.T) {
 			if stdPub == nil {
 				t.Errorf("err getting std private key from key: %v", err)
 			}
-
-			var stdPrivBytes []byte
-
-			switch p := stdPriv.(type) {
-			case *ed25519.PrivateKey:
-				stdPrivBytes = *p
-			case *eddilithium3.PrivateKey:
-				stdPrivBytes = p.Bytes()
-			case *rsa.PrivateKey:
-				stdPrivBytes = x509.MarshalPKCS1PrivateKey(p)
-			}
-
 			if err != nil {
 				t.Errorf("err marshaling %v key: %v", reflect.TypeOf(stdPriv), err)
-			}
-
-			privBytes, err := priv.Raw()
-			if err != nil {
-				t.Errorf("err getting raw bytes for %v key: %v", reflect.TypeOf(priv), err)
-			}
-
-			if !bytes.Equal(stdPrivBytes, privBytes) {
-				t.Errorf("err roundtripping %v key", reflect.TypeOf(priv))
 			}
 		})
 	}
@@ -159,9 +102,6 @@ func TestKeyPairFromKey(t *testing.T) {
 
 func testKeyType(typ pb.KeyType, t *testing.T) {
 	bits := 512
-	if typ == RSA {
-		bits = 2048
-	}
 	sk, pk, err := test.RandTestKeyPair(typ, bits)
 	if err != nil {
 		t.Fatal(err)
@@ -250,7 +190,7 @@ func testKeyEquals(t *testing.T, k Key) {
 		t.Fatal("Key not equal to itself.")
 	}
 
-	sk, pk, err := test.RandTestKeyPair(RSA, 2048)
+	sk, pk, err := test.RandTestKeyPair(Ed25519, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}

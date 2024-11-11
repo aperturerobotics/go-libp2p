@@ -18,25 +18,20 @@ import (
 type KeyType int32
 
 const (
-	KeyType_RSA          KeyType = 0
-	KeyType_Ed25519      KeyType = 1
-	KeyType_EdDilithium2 KeyType = 4
-	KeyType_EdDilithium3 KeyType = 5
+	// RSA = 0;
+	KeyType_RESERVED KeyType = 0
+	KeyType_Ed25519  KeyType = 1
 )
 
 // Enum value maps for KeyType.
 var (
 	KeyType_name = map[int32]string{
-		0: "RSA",
+		0: "RESERVED",
 		1: "Ed25519",
-		4: "EdDilithium2",
-		5: "EdDilithium3",
 	}
 	KeyType_value = map[string]int32{
-		"RSA":          0,
-		"Ed25519":      1,
-		"EdDilithium2": 4,
-		"EdDilithium3": 5,
+		"RESERVED": 0,
+		"Ed25519":  1,
 	}
 )
 
@@ -70,7 +65,7 @@ func (x *PublicKey) GetType() KeyType {
 	if x != nil {
 		return x.Type
 	}
-	return KeyType_RSA
+	return KeyType_RESERVED
 }
 
 func (x *PublicKey) GetData() []byte {
@@ -96,7 +91,7 @@ func (x *PrivateKey) GetType() KeyType {
 	if x != nil {
 		return x.Type
 	}
-	return KeyType_RSA
+	return KeyType_RESERVED
 }
 
 func (x *PrivateKey) GetData() []byte {

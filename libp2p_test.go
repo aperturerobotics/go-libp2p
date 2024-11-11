@@ -136,7 +136,7 @@ func TestDefaultListenAddrs(t *testing.T) {
 }
 
 func makeRandomHost(t *testing.T, port int) (host.Host, error) {
-	priv, _, err := crypto.GenerateKeyPair(crypto.RSA, 2048)
+	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 2048)
 	require.NoError(t, err)
 
 	return New([]Option{

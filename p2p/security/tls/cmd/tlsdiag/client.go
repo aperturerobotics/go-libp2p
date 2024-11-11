@@ -16,7 +16,7 @@ import (
 func StartClient() error {
 	port := flag.Int("p", 5533, "port")
 	peerIDString := flag.String("id", "", "peer ID")
-	keyType := flag.String("key", "ecdsa", "rsa, ecdsa, ed25519 or secp256k1")
+	keyType := flag.String("key", "ed25519", "ed25519 is currently the only option")
 	flag.Parse()
 
 	priv, err := generateKey(*keyType)

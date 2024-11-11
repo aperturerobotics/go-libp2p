@@ -71,7 +71,7 @@ func (mn *mocknet) GenPeerWithOptions(opts PeerOptions) (host.Host, error) {
 	if err := mn.addDefaults(&opts); err != nil {
 		return nil, err
 	}
-	sk, _, err := ic.GenerateEdDilithium3Key(rand.Reader)
+	sk, _, err := ic.GenerateEd25519Key(rand.Reader)
 	if err != nil {
 		return nil, err
 	}

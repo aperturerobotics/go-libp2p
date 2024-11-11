@@ -43,7 +43,7 @@ func testKeybookPrivKey(kb pstore.KeyBook) func(t *testing.T) {
 			t.Error("expected peers to be empty on init")
 		}
 
-		priv, _, err := pt.RandTestKeyPair(ic.RSA, 2048)
+		priv, _, err := pt.RandTestKeyPair(ic.Ed25519, 1024)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -78,7 +78,8 @@ func testKeyBookPubKey(kb pstore.KeyBook) func(t *testing.T) {
 			t.Error("expected peers to be empty on init")
 		}
 
-		_, pub, err := pt.RandTestKeyPair(ic.RSA, 2048)
+		t.Skip("ed25519 keys embed the public key in the peer id and we do not support any other key types currently")
+		_, pub, err := pt.RandTestKeyPair(ic.Ed25519, 2048)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -116,7 +117,7 @@ func testKeyBookPeers(kb pstore.KeyBook) func(t *testing.T) {
 		var peers peer.IDSlice
 		for i := 0; i < 10; i++ {
 			// Add a public key.
-			_, pub, err := pt.RandTestKeyPair(ic.RSA, 2048)
+			_, pub, err := pt.RandTestKeyPair(ic.Ed25519, 1024)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -127,7 +128,7 @@ func testKeyBookPeers(kb pstore.KeyBook) func(t *testing.T) {
 			kb.AddPubKey(p1, pub)
 
 			// Add a private key.
-			priv, _, err := pt.RandTestKeyPair(ic.RSA, 2048)
+			priv, _, err := pt.RandTestKeyPair(ic.Ed25519, 1024)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -181,7 +182,9 @@ func testInlinedPubKeyAddedOnRetrieve(kb pstore.KeyBook) func(t *testing.T) {
 func testKeyBookDelete(kb pstore.KeyBook) func(t *testing.T) {
 	return func(t *testing.T) {
 		// don't use an ed25519 key here, otherwise the key book might try to derive the pubkey from the peer ID
-		priv, pub, err := ic.GenerateKeyPair(ic.RSA, 2048)
+		// NOTE: we removed RSA. so use ed25519 anyway.
+		t.Skip("ed25519 keys embed the public key in the peer id and we do not support any other key types currently")
+		priv, pub, err := ic.GenerateKeyPair(ic.Ed25519, 1024)
 		require.NoError(t, err)
 		p, err := peer.IDFromPublicKey(pub)
 		require.NoError(t, err)
@@ -223,7 +226,7 @@ func BenchmarkKeyBook(b *testing.B, factory KeyBookFactory) {
 
 func benchmarkPubKey(kb pstore.KeyBook) func(*testing.B) {
 	return func(b *testing.B) {
-		_, pub, err := pt.RandTestKeyPair(ic.RSA, 2048)
+		_, pub, err := pt.RandTestKeyPair(ic.Ed25519, 1024)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -247,7 +250,7 @@ func benchmarkPubKey(kb pstore.KeyBook) func(*testing.B) {
 
 func benchmarkAddPubKey(kb pstore.KeyBook) func(*testing.B) {
 	return func(b *testing.B) {
-		_, pub, err := pt.RandTestKeyPair(ic.RSA, 2048)
+		_, pub, err := pt.RandTestKeyPair(ic.Ed25519, 1024)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -266,7 +269,7 @@ func benchmarkAddPubKey(kb pstore.KeyBook) func(*testing.B) {
 
 func benchmarkPrivKey(kb pstore.KeyBook) func(*testing.B) {
 	return func(b *testing.B) {
-		priv, _, err := pt.RandTestKeyPair(ic.RSA, 2048)
+		priv, _, err := pt.RandTestKeyPair(ic.Ed25519, 1024)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -290,7 +293,7 @@ func benchmarkPrivKey(kb pstore.KeyBook) func(*testing.B) {
 
 func benchmarkAddPrivKey(kb pstore.KeyBook) func(*testing.B) {
 	return func(b *testing.B) {
-		priv, _, err := pt.RandTestKeyPair(ic.RSA, 2048)
+		priv, _, err := pt.RandTestKeyPair(ic.Ed25519, 1024)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -310,7 +313,7 @@ func benchmarkAddPrivKey(kb pstore.KeyBook) func(*testing.B) {
 func benchmarkPeersWithKeys(kb pstore.KeyBook) func(*testing.B) {
 	return func(b *testing.B) {
 		for i := 0; i < 10; i++ {
-			priv, pub, err := pt.RandTestKeyPair(ic.RSA, 2048)
+			priv, pub, err := pt.RandTestKeyPair(ic.Ed25519, 1024)
 			if err != nil {
 				b.Fatal(err)
 			}

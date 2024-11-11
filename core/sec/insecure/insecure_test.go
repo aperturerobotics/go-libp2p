@@ -15,7 +15,7 @@ import (
 
 // Run a set of sessions through the session setup and verification.
 func TestConnections(t *testing.T) {
-	clientTpt := newTestTransport(t, crypto.RSA, 2048)
+	clientTpt := newTestTransport(t, crypto.Ed25519, 2048)
 	serverTpt := newTestTransport(t, crypto.Ed25519, 1024)
 
 	clientConn, serverConn, clientErr, serverErr := connect(t, clientTpt, serverTpt, serverTpt.LocalPeer(), "")
@@ -27,7 +27,7 @@ func TestConnections(t *testing.T) {
 }
 
 func TestPeerIdMatchInbound(t *testing.T) {
-	clientTpt := newTestTransport(t, crypto.RSA, 2048)
+	clientTpt := newTestTransport(t, crypto.Ed25519, 1024)
 	serverTpt := newTestTransport(t, crypto.Ed25519, 1024)
 
 	clientConn, serverConn, clientErr, serverErr := connect(t, clientTpt, serverTpt, serverTpt.LocalPeer(), clientTpt.LocalPeer())
@@ -39,7 +39,7 @@ func TestPeerIdMatchInbound(t *testing.T) {
 }
 
 func TestPeerIDMismatchInbound(t *testing.T) {
-	clientTpt := newTestTransport(t, crypto.RSA, 2048)
+	clientTpt := newTestTransport(t, crypto.Ed25519, 1024)
 	serverTpt := newTestTransport(t, crypto.Ed25519, 1024)
 
 	_, _, _, serverErr := connect(t, clientTpt, serverTpt, serverTpt.LocalPeer(), "a-random-peer")
@@ -48,7 +48,7 @@ func TestPeerIDMismatchInbound(t *testing.T) {
 }
 
 func TestPeerIDMismatchOutbound(t *testing.T) {
-	clientTpt := newTestTransport(t, crypto.RSA, 2048)
+	clientTpt := newTestTransport(t, crypto.Ed25519, 1024)
 	serverTpt := newTestTransport(t, crypto.Ed25519, 1024)
 
 	_, _, clientErr, _ := connect(t, clientTpt, serverTpt, "a random peer", "")
